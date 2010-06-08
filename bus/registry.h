@@ -80,6 +80,8 @@ GList           *bus_registry_get_engines       (BusRegistry    *registry);
 GList           *bus_registry_get_engines_by_language
                                                 (BusRegistry    *registry,
                                                  const gchar    *language);
+GList           *bus_registry_get_shared_engines
+                                                (BusRegistry    *registry);
 void             bus_registry_stop_all_components
                                                 (BusRegistry    *registry);
 

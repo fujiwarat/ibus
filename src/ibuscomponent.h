@@ -104,9 +104,10 @@ struct _IBusComponent {
 
     GPid     pid;
     guint    child_source_id;
+    guint    shared_type;
 
     /* padding */
-    gpointer pdummy[5];  // We can add 5 pointers without breaking the ABI.
+    gpointer pdummy[4];  // We can add 4 pointers without breaking the ABI.
 };
 
 struct _IBusComponentClass {

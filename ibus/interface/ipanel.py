@@ -88,6 +88,9 @@ class IPanel(dbus.service.Object):
     def RegisterProperties(self, props): pass
 
     @method(in_signature="v")
+    def RegisterSharedProperties(self, props): pass
+
+    @method(in_signature="v")
     def UpdateProperty(self, prop): pass
 
     @method()

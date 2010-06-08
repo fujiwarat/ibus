@@ -45,6 +45,7 @@ enum {
     CURSOR_UP_LOOKUP_TABLE,
     CURSOR_DOWN_LOOKUP_TABLE,
     REGISTER_PROPERTIES,
+    REGISTER_SHARED_PROPERTIES,
     UPDATE_PROPERTY,
     ENABLED,
     DISABLED,
@@ -115,7 +116,8 @@ static void     bus_input_context_cursor_down_lookup_table
                                                 (BusInputContext        *context);
 static void     bus_input_context_register_properties
                                                 (BusInputContext        *context,
-                                                 IBusPropList           *props);
+                                                 IBusPropList           *props,
+                                                 gboolean                shared);
 static void     bus_input_context_update_property
                                                 (BusInputContext        *context,
                                                  IBusProperty           *prop);
@@ -367,6 +369,17 @@ bus_input_context_class_init (BusInputContextClass *klass)
 
     context_signals[REGISTER_PROPERTIES] =
         g_signal_new (I_("register-properties"),
+            G_TYPE_FROM_CLASS (klass),
+            G_SIGNAL_RUN_LAST,
+            0,
+            NULL, NULL,
+            ibus_marshal_VOID__OBJECT,
+            G_TYPE_NONE,
+            1,
+            IBUS_TYPE_PROP_LIST);
+
+    context_signals[REGISTER_SHARED_PROPERTIES] =
+        g_signal_new (I_("register-shared-properties"),
             G_TYPE_FROM_CLASS (klass),
             G_SIGNAL_RUN_LAST,
             0,
@@ -908,6 +921,8 @@ _ic_property_activate (BusInputContext  *context,
     gint prop_state;
     gboolean retval;
     IBusError *error;
+    GList *list;
+    BusEngineProxy *engine;
 
     retval = ibus_message_get_args (message,
                                     &error,
@@ -925,6 +940,12 @@ _ic_property_activate (BusInputContext  *context,
 
     if (context->enabled && context->engine) {
         bus_engine_proxy_property_activate (context->engine, prop_name, prop_state);
+        list = context->shared_engine_list;
+        while (list) {
+            engine = BUS_ENGINE_PROXY (list->data);
+            bus_engine_proxy_property_activate (engine, prop_name, prop_state);
+            list = list->next;
+        }
     }
 
     reply = ibus_message_new_method_return (message);
@@ -1156,6 +1177,9 @@ bus_input_context_has_focus (BusInputContext *context)
 void
 bus_input_context_focus_in (BusInputContext *context)
 {
+    GList *list;
+    BusEngineProxy *engine;
+
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     if (context->has_focus)
@@ -1172,6 +1196,16 @@ bus_input_context_focus_in (BusInputContext *context)
         bus_engine_proxy_enable (context->engine);
         bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
         bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);
+
+        list = context->shared_engine_list;
+        while (list) {
+            engine = BUS_ENGINE_PROXY (list->data);
+            bus_engine_proxy_focus_in (engine);
+            bus_engine_proxy_enable (engine);
+            bus_engine_proxy_set_capabilities (engine, context->capabilities);
+            bus_engine_proxy_set_cursor_location (engine, context->x, context->y, context->w, context->h);
+            list = list->next;
+        }
     }
 
     if (context->capabilities & IBUS_CAP_FOCUS) {
@@ -1221,6 +1255,9 @@ bus_input_context_clear_preedit_text (BusInputContext *context)
 void
 bus_input_context_focus_out (BusInputContext *context)
 {
+    GList *list;
+    BusEngineProxy *engine;
+
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     if (!context->has_focus)
@@ -1229,10 +1266,17 @@ bus_input_context_focus_out (BusInputContext *context)
     bus_input_context_clear_preedit_text (context);
     bus_input_context_update_auxiliary_text (context, text_empty, FALSE);
     bus_input_context_update_lookup_table (context, lookup_table_empty, FALSE);
-    bus_input_context_register_properties (context, props_empty);
+    bus_input_context_register_properties (context, props_empty, FALSE);
 
     if (context->engine && context->enabled) {
         bus_engine_proxy_focus_out (context->engine);
+
+        list = context->shared_engine_list;
+        while (list) {
+            engine = BUS_ENGINE_PROXY (list->data);
+            bus_engine_proxy_focus_out (engine);
+            list = list->next;
+        }
     }
 
     context->has_focus = FALSE;
@@ -1281,10 +1325,19 @@ bus_input_context_property_activate (BusInputContext *context,
                                      const gchar     *prop_name,
                                      gint             prop_state)
 {
+    GList *list;
+    BusEngineProxy *engine;
+
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     if (context->enabled && context->engine) {
         bus_engine_proxy_property_activate (context->engine, prop_name, prop_state);
+        list = context->shared_engine_list;
+        while (list) {
+            engine = BUS_ENGINE_PROXY (list->data);
+            bus_engine_proxy_property_activate (engine, prop_name, prop_state);
+            list = list->next;
+        }
     }
 }
 
@@ -1626,7 +1679,8 @@ bus_input_context_cursor_down_lookup_table (BusInputContext *context)
 
 static void
 bus_input_context_register_properties (BusInputContext *context,
-                                       IBusPropList    *props)
+                                       IBusPropList    *props,
+                                       gboolean         shared)
 {
     g_assert (BUS_IS_INPUT_CONTEXT (context));
     g_assert (IBUS_IS_PROP_LIST (props));
@@ -1636,6 +1690,12 @@ bus_input_context_register_properties (BusInputContext *context,
                                        "RegisterProperties",
                                        IBUS_TYPE_PROP_LIST, &props,
                                        G_TYPE_INVALID);
+    }
+    else if (shared) {
+        g_signal_emit (context,
+                       context_signals[REGISTER_SHARED_PROPERTIES],
+                       0,
+                       props);
     }
     else {
         g_signal_emit (context,
@@ -1666,6 +1726,25 @@ bus_input_context_update_property (BusInputContext *context,
     }
 }
 
+static gboolean
+is_shared_engine (BusEngineProxy *engine, BusInputContext *context)
+{
+    if (context->engine != engine) {
+        GList *list = context->shared_engine_list;
+        gboolean same_engine = FALSE;
+        while (list) {
+            if (BUS_ENGINE_PROXY (list->data) == engine) {
+                same_engine = TRUE;
+                break;
+            }
+            list = list->next;
+        }
+        g_assert (same_engine);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void
 _engine_destroy_cb (BusEngineProxy  *engine,
                     BusInputContext *context)
@@ -1673,7 +1752,7 @@ _engine_destroy_cb (BusEngineProxy  *engine,
     g_assert (BUS_IS_ENGINE_PROXY (engine));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    is_shared_engine (engine, context);
 
     bus_input_context_set_engine (context, NULL);
 }
@@ -1683,13 +1762,19 @@ _engine_commit_text_cb (BusEngineProxy  *engine,
                         IBusText        *text,
                         BusInputContext *context)
 {
+    gboolean shared = FALSE;
+    gboolean force_enabled = FALSE;
+
     g_assert (BUS_IS_ENGINE_PROXY (engine));
     g_assert (text != NULL);
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    shared = is_shared_engine (engine, context);
 
     bus_input_context_commit_text (context, text);
+    if (force_enabled) {
+        bus_input_context_disable (context);
+    }
 }
 
 static void
@@ -1702,7 +1787,7 @@ _engine_forward_key_event_cb (BusEngineProxy    *engine,
     g_assert (BUS_IS_ENGINE_PROXY (engine));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    is_shared_engine (engine, context);
 
     if (!context->enabled)
         return;
@@ -1724,7 +1809,7 @@ _engine_delete_surrounding_text_cb (BusEngineProxy    *engine,
     g_assert (BUS_IS_ENGINE_PROXY (engine));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    is_shared_engine (engine, context);
 
     if (!context->enabled)
         return;
@@ -1748,7 +1833,7 @@ _engine_update_preedit_text_cb (BusEngineProxy  *engine,
     g_assert (IBUS_IS_TEXT (text));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    is_shared_engine (engine, context);
 
     if (!context->enabled)
         return;
@@ -1766,7 +1851,7 @@ _engine_update_auxiliary_text_cb (BusEngineProxy   *engine,
     g_assert (IBUS_IS_TEXT (text));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    is_shared_engine (engine, context);
 
     if (!context->enabled)
         return;
@@ -1784,7 +1869,7 @@ _engine_update_lookup_table_cb (BusEngineProxy   *engine,
     g_assert (IBUS_IS_LOOKUP_TABLE (table));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    is_shared_engine (engine, context);
 
     if (!context->enabled)
         return;
@@ -1797,16 +1882,18 @@ _engine_register_properties_cb (BusEngineProxy  *engine,
                                 IBusPropList    *props,
                                 BusInputContext *context)
 {
+    gboolean shared;
+
     g_assert (BUS_IS_ENGINE_PROXY (engine));
     g_assert (IBUS_IS_PROP_LIST (props));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    shared = is_shared_engine (engine, context);
 
     if (!context->enabled)
         return;
 
-    bus_input_context_register_properties (context, props);
+    bus_input_context_register_properties (context, props, shared);
 }
 
 static void
@@ -1818,7 +1905,7 @@ _engine_update_property_cb (BusEngineProxy  *engine,
     g_assert (IBUS_IS_PROPERTY (prop));
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    g_assert (context->engine == engine);
+    is_shared_engine (engine, context);
 
     if (!context->enabled)
         return;
@@ -1857,6 +1944,9 @@ DEFINE_FUNCTION (cursor_down_lookup_table)
 void
 bus_input_context_enable (BusInputContext *context)
 {
+    GList *list;
+    BusEngineProxy *engine;
+
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     if (!context->has_focus) {
@@ -1879,6 +1969,16 @@ bus_input_context_enable (BusInputContext *context)
     bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
     bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);
 
+    list = context->shared_engine_list;
+    while (list) {
+        engine = BUS_ENGINE_PROXY (list->data);
+        bus_engine_proxy_enable (engine);
+        bus_engine_proxy_focus_in (engine);
+        bus_engine_proxy_set_capabilities (engine, context->capabilities);
+        bus_engine_proxy_set_cursor_location (engine, context->x, context->y, context->w, context->h);
+        list = list->next;
+    }
+
     bus_input_context_send_signal (context,
                                    "Enabled",
                                    G_TYPE_INVALID);
@@ -1890,16 +1990,27 @@ bus_input_context_enable (BusInputContext *context)
 void
 bus_input_context_disable (BusInputContext *context)
 {
+    GList *list;
+    BusEngineProxy *engine;
+
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     bus_input_context_clear_preedit_text (context);
     bus_input_context_update_auxiliary_text (context, text_empty, FALSE);
     bus_input_context_update_lookup_table (context, lookup_table_empty, FALSE);
-    bus_input_context_register_properties (context, props_empty);
+    bus_input_context_register_properties (context, props_empty, FALSE);
 
     if (context->engine) {
         bus_engine_proxy_focus_out (context->engine);
         bus_engine_proxy_disable (context->engine);
+
+        list = context->shared_engine_list;
+        while (list) {
+            engine = BUS_ENGINE_PROXY (list->data);
+            bus_engine_proxy_focus_out (engine);
+            bus_engine_proxy_disable (engine);
+            list = list->next;
+        }
     }
 
     bus_input_context_send_signal (context,
@@ -1954,7 +2065,7 @@ bus_input_context_unset_engine (BusInputContext *context)
     bus_input_context_clear_preedit_text (context);
     bus_input_context_update_auxiliary_text (context, text_empty, FALSE);
     bus_input_context_update_lookup_table (context, lookup_table_empty, FALSE);
-    bus_input_context_register_properties (context, props_empty);
+    bus_input_context_register_properties (context, props_empty, FALSE);
 
     if (context->engine) {
         gint i;
@@ -1965,6 +2076,33 @@ bus_input_context_unset_engine (BusInputContext *context)
         g_object_unref (context->engine);
         context->engine = NULL;
     }
+}
+
+static void
+bus_input_context_unset_shared_engine_list (BusInputContext *context)
+{
+    GList *list;
+    BusEngineProxy  *engine;
+    gint i;
+
+    g_assert (BUS_IS_INPUT_CONTEXT (context));
+
+    if (context->shared_engine_list == NULL) {
+        return;
+    }
+
+    list = context->shared_engine_list;
+    while (list) {
+        engine = BUS_ENGINE_PROXY (list->data);
+        for (i = 0; signals[i].name != NULL; i++) {
+            g_signal_handlers_disconnect_by_func (engine, signals[i].callback, context);
+        }
+        /* Do not destroy the engine anymore, because of global engine feature */
+        g_object_unref (engine);
+        list = list->next;
+    }
+    g_list_free (context->shared_engine_list);
+    context->shared_engine_list = NULL;
 }
 
 void
@@ -2012,6 +2150,54 @@ bus_input_context_get_engine (BusInputContext *context)
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     return context->engine;
+}
+
+void
+bus_input_context_set_shared_engine_list (BusInputContext *context,
+                                          GList           *shared_engine_list)
+{
+    gint i;
+    GList *list;
+    BusEngineProxy  *engine;
+
+    g_assert (BUS_IS_INPUT_CONTEXT (context));
+
+    if (context->shared_engine_list != NULL) {
+        bus_input_context_unset_shared_engine_list (context);
+    }
+
+    if (shared_engine_list == NULL) {
+        context->shared_engine_list = NULL;
+    }
+    else {
+        list = context->shared_engine_list = shared_engine_list;
+        while (list) {
+            engine = BUS_ENGINE_PROXY (list->data);
+            g_object_ref_sink (engine);
+
+            for (i = 0; signals[i].name != NULL; i++) {
+                g_signal_connect (engine,
+                                  signals[i].name,
+                                  signals[i].callback,
+                                  context);
+            }
+            if (context->has_focus && context->enabled) {
+                bus_engine_proxy_focus_in (engine);
+                bus_engine_proxy_enable (engine);
+                bus_engine_proxy_set_capabilities (engine, context->capabilities);
+                bus_engine_proxy_set_cursor_location (engine, context->x, context->y, context->w, context->h);
+            }
+            list = list->next;
+        }
+    }
+}
+
+GList *
+bus_input_context_get_shared_engine_list (BusInputContext *context)
+{
+    g_assert (BUS_IS_INPUT_CONTEXT (context));
+
+    return context->shared_engine_list;
 }
 
 static gboolean

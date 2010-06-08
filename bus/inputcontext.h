@@ -54,6 +54,7 @@ struct _BusInputContext {
     /* instance members */
     BusConnection *connection;
     BusEngineProxy *engine;
+    GList *shared_engine_list;
     gchar *client;
 
     gboolean has_focus;
@@ -116,6 +117,11 @@ void                 bus_input_context_candidate_clicked(BusInputContext    *con
 void                 bus_input_context_set_engine       (BusInputContext    *context,
                                                          BusEngineProxy     *factory);
 BusEngineProxy      *bus_input_context_get_engine       (BusInputContext    *context);
+void                 bus_input_context_set_shared_engine_list
+                                                        (BusInputContext    *context,
+                                                         GList              *shared_engine_list);
+GList               *bus_input_context_get_shared_engine_list
+                                                        (BusInputContext    *context);
 void                 bus_input_context_property_activate(BusInputContext    *context,
                                                          const gchar        *prop_name,
                                                          gint                prop_state);

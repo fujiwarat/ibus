@@ -72,6 +72,7 @@ class LanguageBar(gtk.Toolbar):
         self.__show_im_name = False
         self.__im_name = None
         self.__props = None
+        self.__shared_props = None
         self.__selected_menu_item = None
         self.set_style(gtk.TOOLBAR_BOTH_HORIZ)
         self.set_show_arrow(False)
@@ -190,6 +191,163 @@ class LanguageBar(gtk.Toolbar):
             size = gtk.icon_size_lookup(gtk.ICON_SIZE_MENU)
             item.set_image(icon.IconWidget("ibus", size[0]))
 
+    def __register_properties(self, props):
+        # race between register_properties and register_shared_properties
+        pad = len(self.__properties)
+        # create new properties
+        for i, prop in enumerate(props):
+            if prop.type == ibus.PROP_TYPE_NORMAL:
+                item = ToolButton(prop = prop)
+            elif prop.type == ibus.PROP_TYPE_TOGGLE:
+                item = ToggleToolButton(prop = prop)
+            elif prop.type == ibus.PROP_TYPE_MENU:
+                item = MenuToolButton(prop = prop)
+            elif prop.type == ibus.PROP_TYPE_SEPARATOR:
+                item = SeparatorToolItem()
+            else:
+                raise IBusException("Unknown property type = %d" % prop.type)
+
+            item.connect("property-activate",
+                        lambda w, n, s: self.emit("property-activate", n, s))
+
+            item.set_sensitive(prop.sensitive)
+
+            item.set_no_show_all(True)
+
+            if prop.visible:
+                item.show()
+            else:
+                item.hide()
+
+            self.__properties.append(item)
+            self.insert(item, i + pad + 2)
+
+    def __is_included_properties(self, prop_a, prop_b):
+        if prop_a.get_sub_props() == None or \
+           prop_a.get_sub_props().get_properties()  == None:
+            return True
+        if prop_b.get_sub_props() == None or \
+           prop_b.get_sub_props().get_properties()  == None:
+            return True
+        for pb in prop_b.get_sub_props().get_properties():
+            is_same = False
+            for pa in prop_a.get_sub_props().get_properties():
+                if pa.key == pb.key and \
+                   pa.type == pb.type and \
+                   pa.label.text == pb.label.text and \
+                   pa.icon == pb.icon:
+                    is_same = True
+                    break
+            if not is_same:
+                return False
+        return True
+
+    def __merge_properties(self, prop_a, prop_b):
+        if prop_a != None:
+            new_prop = ibus.Property(key=prop_a.key,
+                                     type=prop_a.type,
+                                     label=prop_a.label,
+                                     tooltip=prop_a.tooltip,
+                                     icon=prop_a.icon)
+        else:
+            new_prop = ibus.Property(key=prop_b.key,
+                                     type=prop_b.type,
+                                     label=unicode(_("Use shared engines")),
+                                     icon=u"ibus-setup",
+                                     tooltip=unicode(_("Use shared engines")))
+        prop_list = ibus.PropList()
+        if prop_a != None and prop_a.get_sub_props():
+            for prop in prop_a.get_sub_props().get_properties():
+                prop_list.append(prop)
+        if prop_b.get_sub_props():
+            for prop in prop_b.get_sub_props().get_properties():
+                prop_list.append(prop)
+        new_prop.set_sub_props(prop_list)
+        return new_prop
+
+    def __append_shared_properties(self, props):
+        if self.__shared_props == None:
+            for prop in props.get_properties():
+                new_prop = self.__merge_properties(None, prop)
+                if new_prop != None:
+                    new_prop_list = ibus.PropList()
+                    new_prop_list.append(new_prop)
+                    self.__shared_props = new_prop_list
+        else:
+            for prop in props.get_properties():
+                is_same = False
+                new_prop = None
+                for shared_prop in self.__shared_props.get_properties():
+                    if prop.key == shared_prop.key and \
+                       prop.type == shared_prop.type and \
+                       prop.label.text == shared_prop.label.text and \
+                       prop.icon == shared_prop.icon:
+                        is_same = True
+                        break
+                    if (prop.key == "ibus-shared-menu" and \
+                        prop.key == shared_prop.key and \
+                        prop.type == shared_prop.type) and \
+                       (prop.label.text != shared_prop.label.text or \
+                        prop.icon != shared_prop.icon):
+                        is_same = True
+                        if not self.__is_included_properties(shared_prop, prop):
+                            new_prop = self.__merge_properties(shared_prop, prop)
+                            break
+                if is_same == False:
+                    self.__shared_props.append(prop)
+                if new_prop != None:
+                    new_prop_list = ibus.PropList()
+                    for shared_prop in self.__shared_props.get_properties():
+                        if (prop.key == "ibus-shared-menu" and \
+                            prop.key == shared_prop.key and \
+                            prop.type == shared_prop.type) and \
+                           (prop.label.text != shared_prop.label.text or \
+                            prop.icon != shared_prop.icon):
+                            new_prop_list.append(new_prop)
+                        else:
+                            new_prop_list.append(prop)
+                    self.__shared_props = new_prop_list
+
+    def __create_im_menu_with_properties(self, menu, props):
+        list = props.get_properties()
+        list.reverse()
+        radio_group = None
+
+        for i, prop in enumerate(list):
+            if prop.type == ibus.PROP_TYPE_NORMAL:
+                item = ImageMenuItem(prop = prop)
+                self.__set_item_icon(item, prop)
+            elif prop.type == ibus.PROP_TYPE_TOGGLE:
+                item = RadioMenuItem(radio_group, prop = prop)
+                radio_group = item
+            elif prop.type == ibus.PROP_TYPE_SEPARATOR:
+                item = SeparatorMenuItem()
+                radio_group = None
+            elif prop.type == ibus.PROP_TYPE_MENU:
+                item = ImageMenuItem(prop = prop)
+                self.__set_item_icon(item, prop)
+                submenu = Menu(prop)
+                item.set_submenu(submenu)
+                submenu.connect("property-activate",
+                                lambda w, n, s: self.emit("property-activate", n, s))
+            else:
+                raise IBusException("Unknown property type = %d" % prop.type)
+
+            item.set_sensitive(prop.sensitive)
+
+            item.set_no_show_all(True)
+
+            if prop.visible:
+                item.show()
+            else:
+                item.hide()
+
+            self.__properties.append(item)
+            menu.insert(item, 0)
+
+            item.connect("property-activate",
+                         lambda w, n, s: self.emit("property-activate", n, s))
+
     def do_show(self):
         gtk.Toolbar.do_show(self)
 
@@ -267,33 +425,16 @@ class LanguageBar(gtk.Toolbar):
             return
         # refresh items on labguage bar
         self.__remove_properties()
-        # create new properties
-        for i, prop in enumerate(props):
-            if prop.type == ibus.PROP_TYPE_NORMAL:
-                item = ToolButton(prop = prop)
-            elif prop.type == ibus.PROP_TYPE_TOGGLE:
-                item = ToggleToolButton(prop = prop)
-            elif prop.type == ibus.PROP_TYPE_MENU:
-                item = MenuToolButton(prop = prop)
-            elif prop.type == ibus.PROP_TYPE_SEPARATOR:
-                item = SeparatorToolItem()
-            else:
-                raise IBusException("Unknown property type = %d" % prop.type)
+        self.__register_properties(self.__props)
+        self.__register_properties(self.__shared_props)
 
-            item.connect("property-activate",
-                        lambda w, n, s: self.emit("property-activate", n, s))
-
-            item.set_sensitive(prop.sensitive)
-
-            item.set_no_show_all(True)
-
-            if prop.visible:
-                item.show()
-            else:
-                item.hide()
-
-            self.__properties.append(item)
-            self.insert(item, i + 2)
+    def register_shared_properties(self, props):
+        self.__append_shared_properties(props)
+        if self.__show == 0:
+            return
+        self.__remove_properties()
+        self.__register_properties(self.__props)
+        self.__register_properties(self.__shared_props)
 
     def update_property(self, prop):
         if self.__show == 0 and self.__props:
@@ -369,42 +510,7 @@ class LanguageBar(gtk.Toolbar):
         item.connect("property-activate",
                      lambda w, n, s: self.emit("show-engine-about"))
 
-        list = props.get_properties()
-        list.reverse()
-        radio_group = None
-
-        for i, prop in enumerate(list):
-            if prop.type == ibus.PROP_TYPE_NORMAL:
-                item = ImageMenuItem(prop = prop)
-                self.__set_item_icon(item, prop)
-            elif prop.type == ibus.PROP_TYPE_TOGGLE:
-                item = RadioMenuItem(radio_group, prop = prop)
-                radio_group = item
-            elif prop.type == ibus.PROP_TYPE_SEPARATOR:
-                item = SeparatorMenuItem()
-                radio_group = None
-            elif prop.type == ibus.PROP_TYPE_MENU:
-                item = ImageMenuItem(prop = prop)
-                self.__set_item_icon(item, prop)
-                submenu = Menu(prop)
-                item.set_submenu(submenu)
-                submenu.connect("property-activate",
-                                lambda w, n, s: self.emit("property-activate", n, s))
-            else:
-                raise IBusException("Unknown property type = %d" % prop.type)
-
-            item.set_sensitive(prop.sensitive)
-
-            item.set_no_show_all(True)
-
-            if prop.visible:
-                item.show()
-            else:
-                item.hide()
-
-            self.__properties.append(item)
-            menu.insert(item, 0)
-
-            item.connect("property-activate",
-                         lambda w, n, s: self.emit("property-activate", n, s))
+        if self.__shared_props != None:
+            self.__create_im_menu_with_properties(menu, self.__shared_props)
+        self.__create_im_menu_with_properties(menu, props)
 

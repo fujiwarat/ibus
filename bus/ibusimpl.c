@@ -212,6 +212,7 @@ bus_ibus_impl_set_preload_engines (BusIBusImpl *ibus,
                                    GValue      *value)
 {
     GList *engine_list = NULL;
+    GList *list;
 
     g_list_foreach (ibus->engine_list, (GFunc) g_object_unref, NULL);
     g_list_free (ibus->engine_list);
@@ -242,6 +243,10 @@ bus_ibus_impl_set_preload_engines (BusIBusImpl *ibus,
     g_list_foreach (engine_list, (GFunc) g_object_ref, NULL);
     ibus->engine_list = engine_list;
 
+    if (engine_list == NULL) {
+        return;
+    }
+
     if (ibus->engine_list) {
         IBusComponent *component;
 
@@ -250,6 +255,18 @@ bus_ibus_impl_set_preload_engines (BusIBusImpl *ibus,
             ibus_component_start (component, g_verbose);
         }
     }
+
+    list = engine_list = bus_registry_get_shared_engines (ibus->registry);
+    while (list) {
+        IBusComponent *component;
+
+        component = ibus_component_get_from_engine ((IBusEngineDesc *) list->data);
+        if (component && !ibus_component_is_running (component)) {
+            ibus_component_start (component, g_verbose);
+        }
+        list = list->next;
+    }
+    g_list_free (engine_list);
 }
 
 static void
@@ -500,6 +517,7 @@ _dbus_name_owner_changed_cb (BusDBusImpl *dbus,
     g_assert (BUS_IS_IBUS_IMPL (ibus));
 
     BusFactoryProxy *factory;
+    IBusComponent *component;
 
     if (g_strcmp0 (name, IBUS_SERVICE_PANEL) == 0) {
         if (g_strcmp0 (new_name, "") != 0) {
@@ -562,6 +580,13 @@ _dbus_name_owner_changed_cb (BusDBusImpl *dbus,
         }
     }
 
+    component = bus_registry_lookup_component_by_name (ibus->registry, name);
+    if (component && component->shared_type) {
+        if (ibus->focused_context) {
+            bus_input_context_set_shared_engine_list (ibus->focused_context,
+                                                      NULL);
+        }
+    }
     factory = bus_registry_name_owner_changed (ibus->registry, name, old_name, new_name);
 
     if (factory) {
@@ -853,6 +878,30 @@ _find_engine_desc_by_name(BusIBusImpl *ibus,
 }
 
 static void
+_create_shared_engine_proxy_list (BusInputContext *context,
+                                  BusIBusImpl     *ibus)
+{
+    GList *list, *shared_engine_desc_list;
+    GList *shared_engine_proxy_list = NULL;
+    BusEngineProxy *engine;
+
+    list = shared_engine_desc_list = bus_registry_get_shared_engines (ibus->registry);
+    while (list) {
+        engine = bus_ibus_impl_create_engine ((IBusEngineDesc *) list->data);
+        if (engine != NULL) {
+            shared_engine_proxy_list = g_list_append (shared_engine_proxy_list,
+                                                      engine);
+        }
+        list = list->next;
+    }
+    g_list_free (shared_engine_desc_list);
+    if (shared_engine_proxy_list != NULL) {
+        bus_input_context_set_shared_engine_list (context,
+                                                  shared_engine_proxy_list);
+    }
+}
+
+static void
 _context_request_engine_cb (BusInputContext *context,
                             gchar           *engine_name,
                             BusIBusImpl     *ibus)
@@ -893,11 +942,20 @@ _context_request_engine_cb (BusInputContext *context,
         engine_desc = _find_engine_desc_by_name (ibus, engine_name);
     }
 
-    if (engine_desc != NULL) {
-        engine = bus_ibus_impl_create_engine (engine_desc);
-        if (engine != NULL) {
-            bus_ibus_impl_set_context_engine (ibus, context, engine);
-        }
+    if (engine_desc == NULL) {
+        return;
+    }
+    engine = bus_ibus_impl_create_engine (engine_desc);
+    if (engine != NULL) {
+        bus_ibus_impl_set_context_engine (ibus, context, engine);
+    }
+
+    if (ibus->registry == NULL) {
+        return;
+    }
+
+    if (!bus_input_context_get_shared_engine_list (context)) {
+        _create_shared_engine_proxy_list (context, ibus);
     }
 }
 
@@ -1131,6 +1189,10 @@ _context_focus_in_cb (BusInputContext *context,
 
     g_object_ref (context);
     ibus->focused_context = context;
+
+   if (!bus_input_context_get_shared_engine_list (context)) {
+       _create_shared_engine_proxy_list (context, ibus);
+   }
 }
 
 static void

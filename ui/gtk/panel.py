@@ -178,6 +178,9 @@ class Panel(ibus.PanelBase):
     def register_properties(self, props):
         self.__language_bar.register_properties(props)
 
+    def register_shared_properties(self, props):
+        self.__language_bar.register_shared_properties(props)
+
     def update_property(self, prop):
         self.__language_bar.update_property(prop)
 

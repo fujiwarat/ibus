@@ -113,6 +113,9 @@ class PanelBase(Object):
     def register_properties(self, props):
         pass
 
+    def register_shared_properties(self, props):
+        pass
+
     def update_property(self, prop):
         pass
 
@@ -227,6 +230,10 @@ class PanelProxy(interface.IPanel):
     def RegisterProperties(self, props):
         props = deserialize_object(props)
         self.__panel.register_properties(props)
+
+    def RegisterSharedProperties(self, props):
+        props = deserialize_object(props)
+        self.__panel.register_shared_properties(props)
 
     def UpdateProperty(self, prop):
         prop = deserialize_object(prop)

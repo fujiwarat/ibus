@@ -92,6 +92,12 @@ bus_registry_init (BusRegistry *registry)
         IBusComponent *comp = (IBusComponent *)p->data;
         GList *p1;
 
+#if 0
+        /* Should not show shared engine as a single engine? */
+        if (comp->shared_type != 0) {
+            continue;
+        }
+#endif
         for (p1 = comp->engines; p1 != NULL; p1 = p1->next) {
             IBusEngineDesc *desc = (IBusEngineDesc *)p1->data;
             g_hash_table_insert (registry->engine_table, desc->name, desc);
@@ -437,6 +443,29 @@ bus_registry_get_engines_by_language (BusRegistry *registry,
     }
 
     g_list_free (p1);
+    return engines;
+}
+
+GList *
+bus_registry_get_shared_engines (BusRegistry *registry)
+{
+    GList *p, *engines = NULL;
+    g_assert (BUS_IS_REGISTRY (registry));
+
+    for (p = registry->components; p != NULL; p = p->next) {
+        IBusComponent *comp = (IBusComponent *)p->data;
+        GList *p1;
+
+        if (comp->shared_type == 0) {
+            continue;
+        }
+        for (p1 = comp->engines; p1 != NULL; p1 = p1->next) {
+            IBusEngineDesc *desc = (IBusEngineDesc *)p1->data;
+            engines = g_list_append (engines, desc);
+            g_object_set_data ((GObject *)desc, "component", comp);
+        }
+    }
+
     return engines;
 }
 

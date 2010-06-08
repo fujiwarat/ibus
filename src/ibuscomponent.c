@@ -91,6 +91,7 @@ ibus_component_init (IBusComponent *component)
     component->observed_paths = NULL;
     component->pid = 0;
     component->child_source_id = 0;
+    component->shared_type = 0;
 }
 
 static void
@@ -115,6 +116,7 @@ ibus_component_destroy (IBusComponent *component)
     component->homepage = NULL;
     component->exec = NULL;
     component->textdomain = NULL;
+    component->shared_type = 0;
 
     g_list_foreach (component->observed_paths, (GFunc)g_object_unref, NULL);
     g_list_free (component->observed_paths);
@@ -303,6 +305,7 @@ ibus_component_copy (IBusComponent       *dest,
     dest->homepage      = g_strdup (src->homepage);
     dest->exec          = g_strdup (src->exec);
     dest->textdomain    = g_strdup (src->textdomain);
+    dest->shared_type   = src->shared_type;
 
     dest->observed_paths = g_list_copy (src->observed_paths);
     g_list_foreach (dest->observed_paths, (GFunc) g_object_ref, NULL);
@@ -354,6 +357,12 @@ ibus_component_output (IBusComponent *component,
     OUTPUT_ENTRY_1 (textdomain);
 #undef OUTPUT_ENTRY
 #undef OUTPUT_ENTRY_1
+
+    if (component->shared_type) {
+        g_string_append_indent (output, indent + 1);
+        g_string_append_printf (output, "<shared_type>%s</shared_type>\n",
+                                component->shared_type ? "TRUE" : "FALSE");
+    }
 
     if (component->observed_paths) {
         g_string_append_indent (output, indent + 1);
@@ -434,6 +443,20 @@ ibus_component_parse_xml_node (IBusComponent   *component,
         PARSE_ENTRY_1 (textdomain);
 #undef PARSE_ENTRY
 #undef PARSE_ENTRY_1
+
+        if (g_strcmp0 (sub_node->name, "shared_type") == 0) {
+            if (sub_node->text == NULL) {
+                continue;
+            }
+            if (!g_strcmp0 (sub_node->text, "1") ||
+                !g_ascii_strcasecmp (sub_node->text, "true")) {
+                component->shared_type = 1;
+            }
+            if (!g_strcmp0 (sub_node->text, "languagebar")) {
+                component->shared_type = 1;
+            }
+            continue;
+        }
 
         if (g_strcmp0 (sub_node->name, "engines") == 0) {
             ibus_component_parse_engines (component, sub_node);
