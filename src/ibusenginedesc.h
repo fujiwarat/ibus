@@ -78,12 +78,13 @@ typedef struct _BusComponent BusComponent;
  * @author: Author of the input method engine.
  * @icon: Icon file of this engine.
  * @layout: Keyboard layout
- * @hotkeys: One or more hotkeys for switching to this engine, separated by
  *  semi-colon.
  * @rank: Preference rank among engines, the highest ranked IME will put in
  * the front.
  *
  * Input method engine description data.
+ * You can get extended values with g_object_get_properties.
+ * hotkeys: One or more hotkeys for switching to this engine, separated by
  */
 struct _IBusEngineDesc {
     IBusSerializable parent;
@@ -98,7 +99,6 @@ struct _IBusEngineDesc {
     gchar *author;
     gchar *icon;
     gchar *layout;
-    gchar *hotkeys;
     guint  rank;
 };
 

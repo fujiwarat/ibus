@@ -2000,6 +2000,8 @@ bus_ibus_impl_save_global_previous_engine_name_to_config (BusIBusImpl *ibus)
 static void
 _add_engine_hotkey (IBusEngineDesc *engine, BusIBusImpl *ibus)
 {
+    GValue value = { 0, };
+    const gchar *hotkeys;
     gchar **hotkey_list;
     gchar **p;
     gchar *hotkey;
@@ -2009,11 +2011,21 @@ _add_engine_hotkey (IBusEngineDesc *engine, BusIBusImpl *ibus)
     guint keyval;
     guint modifiers;
 
-    if (!engine || !engine->hotkeys || !*engine->hotkeys) {
+    if (!engine) {
         return;
     }
 
-    hotkey_list = g_strsplit_set (engine->hotkeys, ";,", 0);
+    g_value_init (&value, G_TYPE_STRING);
+    g_object_get_property (G_OBJECT (engine), "hotkeys", &value);
+    hotkeys = g_value_get_string (&value);
+
+    if (!hotkeys || !*hotkeys) {
+        g_value_unset (&value);
+        return;
+    }
+
+    hotkey_list = g_strsplit_set (hotkeys, ";,", 0);
+    g_value_unset (&value);
 
     for (p = hotkey_list; p && *p; ++p) {
         hotkey = g_strstrip (*p);
