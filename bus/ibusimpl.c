@@ -94,10 +94,12 @@ static void     _factory_destroy_cb             (BusFactoryProxy    *factory,
 static void     bus_ibus_impl_set_context_engine_from_desc
                                                 (BusIBusImpl        *ibus,
                                                  BusInputContext    *context,
-                                                 IBusEngineDesc     *engine_desc);
+                                                 IBusEngineDesc     *engine_desc,
+                                                 gboolean            clear);
 static void     bus_ibus_impl_set_context_engine(BusIBusImpl        *ibus,
                                                  BusInputContext    *context,
-                                                 BusEngineProxy     *engine);
+                                                 BusEngineProxy     *engine,
+                                                 gboolean            clear);
 
 static gchar   *bus_ibus_impl_load_global_engine_name_from_config
                                                 (BusIBusImpl        *ibus);
@@ -902,7 +904,7 @@ _context_request_engine_cb (BusInputContext *context,
         /* Use global engine if possible. */
         if (ibus->use_global_engine) {
             if (ibus->global_engine) {
-                bus_ibus_impl_set_context_engine (ibus, context, ibus->global_engine);
+                bus_ibus_impl_set_context_engine (ibus, context, ibus->global_engine, TRUE);
                 return;
             }
             else {
@@ -928,7 +930,7 @@ _context_request_engine_cb (BusInputContext *context,
         engine_desc = _find_engine_desc_by_name (ibus, engine_name);
     }
 
-    bus_ibus_impl_set_context_engine_from_desc (ibus, context, engine_desc);
+    bus_ibus_impl_set_context_engine_from_desc (ibus, context, engine_desc, TRUE);
 }
 
 static void
@@ -971,7 +973,7 @@ bus_ibus_impl_context_request_next_engine_in_menu (BusIBusImpl     *ibus,
         }
     }
 
-    bus_ibus_impl_set_context_engine_from_desc (ibus, context, next_desc);
+    bus_ibus_impl_set_context_engine_from_desc (ibus, context, next_desc, TRUE);
 }
 
 static void
@@ -1050,12 +1052,13 @@ bus_ibus_impl_set_global_engine (BusIBusImpl    *ibus,
 static void
 bus_ibus_impl_set_context_engine_from_desc (BusIBusImpl     *ibus,
                                             BusInputContext *context,
-                                            IBusEngineDesc  *engine_desc)
+                                            IBusEngineDesc  *engine_desc,
+                                            gboolean         clear)
 {
     if (engine_desc != NULL) {
         BusEngineProxy *engine = bus_ibus_impl_create_engine (engine_desc);
         if (engine != NULL) {
-            bus_ibus_impl_set_context_engine (ibus, context, engine);
+            bus_ibus_impl_set_context_engine (ibus, context, engine, clear);
         }
     }
 }
@@ -1063,7 +1066,9 @@ bus_ibus_impl_set_context_engine_from_desc (BusIBusImpl     *ibus,
 static void
 bus_ibus_impl_set_context_engine (BusIBusImpl     *ibus,
                                   BusInputContext *context,
-                                  BusEngineProxy  *engine) {
+                                  BusEngineProxy  *engine,
+                                  gboolean         clear)
+{
   g_object_set_data (G_OBJECT (context), "previous-engine-name", NULL);
 
   /* If use_global_engine is disabled, then we need to save the previous engine
@@ -1077,7 +1082,7 @@ bus_ibus_impl_set_context_engine (BusIBusImpl     *ibus,
       }
   }
 
-  bus_input_context_set_engine (context, engine);
+  bus_input_context_set_engine (context, engine, clear);
 }
 
 static void
@@ -1122,9 +1127,11 @@ _context_focus_out_cb (BusInputContext    *context,
     }
 
     /* If the use_global_engine option is enabled,
-     * the global engine shoule be detached from the focused context. */
+     * the global engine shoule be detached from the focused context.
+     * preedit is not cleared in focus change because gtk client can
+     * clear preedit in chrome. */
     if (ibus->use_global_engine) {
-        bus_ibus_impl_set_context_engine (ibus, context, NULL);
+        bus_ibus_impl_set_context_engine (ibus, context, NULL, FALSE);
     }
 
     g_object_unref (context);
@@ -1164,7 +1171,9 @@ _context_focus_in_cb (BusInputContext *context,
             bus_ibus_impl_set_global_engine (ibus, bus_input_context_get_engine (context));
         }
         else {
-            bus_ibus_impl_set_context_engine (ibus, context, ibus->global_engine);
+            /* preedit is not cleared in focus change because gtk client can
+             * clear preedit in chrome. */
+            bus_ibus_impl_set_context_engine (ibus, context, ibus->global_engine, FALSE);
             if (ibus->global_engine && bus_engine_proxy_is_enabled (ibus->global_engine)) {
                 bus_input_context_enable (context);
             }
@@ -1926,7 +1935,7 @@ bus_ibus_impl_filter_keyboard_shortcuts (BusIBusImpl     *ibus,
         }
 
         if (current_engine_desc != new_engine_desc) {
-            bus_ibus_impl_set_context_engine_from_desc (ibus, context, new_engine_desc);
+            bus_ibus_impl_set_context_engine_from_desc (ibus, context, new_engine_desc, TRUE);
         }
 
         return TRUE;

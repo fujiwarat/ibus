@@ -77,7 +77,8 @@ static gboolean bus_input_context_send_signal   (BusInputContext        *context
                                                  GType                   first_arg_type,
                                                  ...);
 
-static void     bus_input_context_unset_engine  (BusInputContext        *context);
+static void     bus_input_context_unset_engine  (BusInputContext        *context,
+                                                 gboolean                clear_preedit);
 static void     bus_input_context_commit_text   (BusInputContext        *context,
                                                  IBusText               *text);
 static void     bus_input_context_update_preedit_text
@@ -484,7 +485,7 @@ bus_input_context_destroy (BusInputContext *context)
     }
 
     if (context->engine) {
-        bus_input_context_unset_engine (context);
+        bus_input_context_unset_engine (context, TRUE);
     }
 
     if (context->preedit_text) {
@@ -586,6 +587,7 @@ _ibus_introspect (BusInputContext   *context,
         "      <arg name=\"text\" type=\"v\"/>\n"
         "      <arg name=\"cursor_pos\" type=\"u\"/>\n"
         "      <arg name=\"visible\" type=\"b\"/>\n"
+        "      <arg name=\"mode\" type=\"u\"/>\n"
         "    </signal>\n"
         "    <signal name=\"ShowPreeditText\"/>\n"
         "    <signal name=\"HidePreeditText\"/>\n"
@@ -1253,7 +1255,6 @@ bus_input_context_focus_out (BusInputContext *context)
     if (!context->has_focus)
         return;
 
-    bus_input_context_clear_preedit_text (context);
     bus_input_context_update_auxiliary_text (context, text_empty, FALSE);
     bus_input_context_update_lookup_table (context, lookup_table_empty, FALSE);
     bus_input_context_register_properties (context, props_empty);
@@ -1340,6 +1341,8 @@ bus_input_context_update_preedit_text (BusInputContext *context,
                                        gboolean         visible,
                                        guint            mode)
 {
+    gboolean client_visible;
+
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     if (context->preedit_text) {
@@ -1352,14 +1355,10 @@ bus_input_context_update_preedit_text (BusInputContext *context,
     context->preedit_mode = mode;
 
     if (PREEDIT_CONDITION) {
-        bus_input_context_send_signal (context,
-                                       "UpdatePreeditText",
-                                       IBUS_TYPE_TEXT, &(context->preedit_text),
-                                       G_TYPE_UINT, &(context->preedit_cursor_pos),
-                                       G_TYPE_BOOLEAN, &(context->preedit_visible),
-                                       G_TYPE_INVALID);
+        client_visible = TRUE;
     }
     else {
+        client_visible = FALSE;
         g_signal_emit (context,
                        context_signals[UPDATE_PREEDIT_TEXT],
                        0,
@@ -1367,6 +1366,13 @@ bus_input_context_update_preedit_text (BusInputContext *context,
                        context->preedit_cursor_pos,
                        context->preedit_visible);
     }
+    bus_input_context_send_signal (context,
+                                   "UpdatePreeditText",
+                                   IBUS_TYPE_TEXT, &(context->preedit_text),
+                                   G_TYPE_UINT, &(context->preedit_cursor_pos),
+                                   G_TYPE_BOOLEAN, &client_visible,
+                                   G_TYPE_UINT, &(context->preedit_mode),
+                                   G_TYPE_INVALID);
 }
 
 static void
@@ -1702,7 +1708,7 @@ _engine_destroy_cb (BusEngineProxy  *engine,
 
     g_assert (context->engine == engine);
 
-    bus_input_context_set_engine (context, NULL);
+    bus_input_context_set_engine (context, NULL, TRUE);
 }
 
 static void
@@ -1914,12 +1920,15 @@ bus_input_context_enable (BusInputContext *context)
                    0);
 }
 
-void
-bus_input_context_disable (BusInputContext *context)
+static void
+_bus_input_context_disable_internal (BusInputContext *context,
+                                     gboolean         clear_preedit)
 {
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    bus_input_context_clear_preedit_text (context);
+    if (clear_preedit) {
+        bus_input_context_clear_preedit_text (context);
+    }
     bus_input_context_update_auxiliary_text (context, text_empty, FALSE);
     bus_input_context_update_lookup_table (context, lookup_table_empty, FALSE);
     bus_input_context_register_properties (context, props_empty);
@@ -1937,6 +1946,12 @@ bus_input_context_disable (BusInputContext *context)
                    0);
 
     context->enabled = FALSE;
+}
+
+void
+bus_input_context_disable (BusInputContext *context)
+{
+    _bus_input_context_disable_internal (context, TRUE);
 }
 
 gboolean
@@ -1974,11 +1989,14 @@ const static struct {
 };
 
 static void
-bus_input_context_unset_engine (BusInputContext *context)
+bus_input_context_unset_engine (BusInputContext *context,
+                                gboolean         clear_preedit)
 {
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
-    bus_input_context_clear_preedit_text (context);
+    if (clear_preedit) {
+        bus_input_context_clear_preedit_text (context);
+    }
     bus_input_context_update_auxiliary_text (context, text_empty, FALSE);
     bus_input_context_update_lookup_table (context, lookup_table_empty, FALSE);
     bus_input_context_register_properties (context, props_empty);
@@ -1996,7 +2014,8 @@ bus_input_context_unset_engine (BusInputContext *context)
 
 void
 bus_input_context_set_engine (BusInputContext *context,
-                              BusEngineProxy  *engine)
+                              BusEngineProxy  *engine,
+                              gboolean         clear_preedit)
 {
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
@@ -2004,11 +2023,11 @@ bus_input_context_set_engine (BusInputContext *context,
         return;
 
     if (context->engine != NULL) {
-        bus_input_context_unset_engine (context);
+        bus_input_context_unset_engine (context, clear_preedit);
     }
 
     if (engine == NULL) {
-        bus_input_context_disable (context);
+        _bus_input_context_disable_internal (context, FALSE);
     }
     else {
         gint i;

@@ -216,6 +216,7 @@ ibus_input_context_class_init (IBusInputContextClass *klass)
      * @text: Text to be updated.
      * @cursor_pos: Cursor position.
      * @visible: Whether the update is visible.
+     * @mode: An IBusPreeditFocusMode
      *
      * Emitted to update preedit text.
      *
@@ -229,12 +230,13 @@ ibus_input_context_class_init (IBusInputContextClass *klass)
             G_SIGNAL_RUN_LAST,
             0,
             NULL, NULL,
-            ibus_marshal_VOID__OBJECT_UINT_BOOLEAN,
+            ibus_marshal_VOID__OBJECT_UINT_BOOLEAN_UINT,
             G_TYPE_NONE,
-            3,
+            4,
             IBUS_TYPE_TEXT,
             G_TYPE_UINT,
-            G_TYPE_BOOLEAN);
+            G_TYPE_BOOLEAN,
+            G_TYPE_UINT);
 
     /**
      * IBusInputContext::show-preedit-text:
@@ -562,6 +564,7 @@ ibus_input_context_ibus_signal (IBusProxy           *proxy,
             IBusText *text;
             gint32 cursor_pos;
             gboolean visible;
+            gint32 mode;
             gboolean retval;
 
             retval = ibus_message_get_args (message,
@@ -569,6 +572,7 @@ ibus_input_context_ibus_signal (IBusProxy           *proxy,
                                             IBUS_TYPE_TEXT, &text,
                                             G_TYPE_UINT, &cursor_pos,
                                             G_TYPE_BOOLEAN, &visible,
+                                            G_TYPE_UINT, &mode,
                                             G_TYPE_INVALID);
 
             if (retval) {
@@ -577,7 +581,8 @@ ibus_input_context_ibus_signal (IBusProxy           *proxy,
                                0,
                                text,
                                cursor_pos,
-                               visible);
+                               visible,
+                               mode);
                 if (g_object_is_floating (text))
                     g_object_unref (text);
             }

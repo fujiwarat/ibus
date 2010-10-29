@@ -61,6 +61,7 @@ struct _IBusIMContext {
     PangoAttrList   *preedit_attrs;
     gint             preedit_cursor_pos;
     gboolean         preedit_visible;
+    guint            preedit_mode;
 
     GdkRectangle     cursor_area;
     gboolean         has_focus;
@@ -121,6 +122,10 @@ static void     _set_cursor_location_internal
 
 static void     _bus_connected_cb           (IBusBus            *bus,
                                              IBusIMContext      *context);
+static void     _ibus_context_commit_text_cb
+                                            (IBusInputContext   *ibuscontext,
+                                             IBusText           *text,
+                                             IBusIMContext      *ibusimcontext);
 /* callback functions for slave context */
 static void     _slave_commit_cb            (GtkIMContext       *slave,
                                              gchar              *string,
@@ -387,6 +392,7 @@ ibus_im_context_init (GObject *obj)
     ibusimcontext->preedit_attrs = NULL;
     ibusimcontext->preedit_cursor_pos = 0;
     ibusimcontext->preedit_visible = FALSE;
+    ibusimcontext->preedit_mode = IBUS_ENGINE_PREEDIT_CLEAR;
 
     // Init cursor area
     ibusimcontext->cursor_area.x = -1;
@@ -560,6 +566,22 @@ ibus_im_context_focus_out (GtkIMContext *context)
     IDEBUG ("%s", __FUNCTION__);
 
     IBusIMContext *ibusimcontext = IBUS_IM_CONTEXT (context);
+    IBusText      *text;
+
+    if (ibusimcontext->has_focus == TRUE &&
+        ibusimcontext->ibuscontext != NULL &&
+        ibusimcontext->preedit_mode == IBUS_ENGINE_PREEDIT_COMMIT &&
+        ibusimcontext->preedit_string != NULL) {
+        text = ibus_text_new_from_string (ibusimcontext->preedit_string);
+        g_object_ref_sink (text);
+        _ibus_context_commit_text_cb (ibusimcontext->ibuscontext,
+                                      text,
+                                      ibusimcontext);
+        g_object_unref (text);
+        g_free (ibusimcontext->preedit_string);
+        ibusimcontext->preedit_string = NULL;
+    }
+    ibusimcontext->preedit_mode = IBUS_ENGINE_PREEDIT_CLEAR;
 
     if (_focus_im_context == context) {
         g_object_weak_unref ((GObject *)_focus_im_context, _weak_notify_cb, NULL);
@@ -924,6 +946,7 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
                                       IBusText          *text,
                                       gint               cursor_pos,
                                       gboolean           visible,
+                                      gint               mode,
                                       IBusIMContext     *ibusimcontext)
 {
     IDEBUG ("%s", __FUNCTION__);
@@ -938,6 +961,7 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
         pango_attr_list_unref (ibusimcontext->preedit_attrs);
         ibusimcontext->preedit_attrs = NULL;
     }
+    ibusimcontext->preedit_mode = mode;
 
     str = text->text;
     ibusimcontext->preedit_string = g_strdup (str);
@@ -1045,11 +1069,13 @@ _ibus_context_disabled_cb (IBusInputContext *ibuscontext,
     IDEBUG ("%s", __FUNCTION__);
     ibusimcontext->enable = FALSE;
 
-    /* clear preedit */
     ibusimcontext->preedit_visible = FALSE;
     ibusimcontext->preedit_cursor_pos = 0;
-    g_free (ibusimcontext->preedit_string);
-    ibusimcontext->preedit_string = NULL;
+    /* Do not clear preedit for preedit_mode == 1 on global im. */
+    /*
+     * g_free (ibusimcontext->preedit_string);
+     * ibusimcontext->preedit_string = NULL;
+     */
 
     g_signal_emit (ibusimcontext, _signal_preedit_changed_id, 0);
     g_signal_emit (ibusimcontext, _signal_preedit_end_id, 0);

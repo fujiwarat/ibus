@@ -186,8 +186,15 @@ void         ibus_engine_update_preedit_text
  * @visible: Whether the pre-edit buffer is visible.
  * @mode: Pre-edit commit mode when the focus is lost.
  *
- * Update the pre-edit buffer with commit mode.
- * if mode is IBUS_ENGINE_PREEDIT_CLEAR,
+ * Update the pre-edit buffer with commit mode.  Similar to 
+ * ibus_engine_update_preedit_text(), this function allows users to specify
+ * the behavior on focus out when the pre-edit buffer is visible.
+ *
+ * If @mode is IBUS_ENGINE_PREEDIT_COMMIT, it commits the contents of the 
+ * pre-edit buffer and clears the buffer.
+ * If @mode is IBUS_ENGINE_PREEDIT_CLEAR, it throw the contents away and
+ * clears the buffer.
+ * If @mode is IBUS_ENGINE_PREEDIT_CLEAR,
  * ibus_engine_update_preedit_text_with_mode is compatible with
  * ibus_engine_update_preedit_text.
  *
