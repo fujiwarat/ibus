@@ -52,6 +52,8 @@ enum {
 static guint    engine_signals[LAST_SIGNAL] = { 0 };
 // static guint            engine_signals[LAST_SIGNAL] = { 0 };
 
+static IBusText *text_empty = NULL;
+
 /* functions prototype */
 static void     bus_engine_proxy_real_destroy   (BusEngineProxy         *engine);
 
@@ -300,6 +302,8 @@ bus_engine_proxy_class_init (BusEngineProxyClass *klass)
             1,
             IBUS_TYPE_PROPERTY);
 
+    text_empty = ibus_text_new_from_static_string ("");
+    g_object_ref_sink (text_empty);
 }
 
 static void
@@ -314,6 +318,8 @@ bus_engine_proxy_init (BusEngineProxy *engine)
     engine->enabled = FALSE;
     engine->desc = NULL;
     engine->keymap = NULL;
+    engine->surrounding_text = g_object_ref_sink (text_empty);
+    engine->surrounding_cursor_pos = 0;
 }
 
 static void
@@ -333,6 +339,11 @@ bus_engine_proxy_real_destroy (BusEngineProxy *engine)
     if (engine->keymap) {
         g_object_unref (engine->keymap);
         engine->keymap = NULL;
+    }
+
+    if (engine->surrounding_text) {
+        g_object_unref (engine->surrounding_text);
+        engine->surrounding_text = NULL;
     }
 
     IBUS_OBJECT_CLASS(bus_engine_proxy_parent_class)->destroy (IBUS_OBJECT (engine));
@@ -729,6 +740,29 @@ void bus_engine_proxy_property_hide (BusEngineProxy *engine,
                      "PropertyHide",
                      G_TYPE_STRING, &prop_name,
                      G_TYPE_INVALID);
+}
+
+void bus_engine_proxy_set_surrounding_text (BusEngineProxy *engine,
+                                            IBusText       *text,
+                                            guint           cursor_pos)
+{
+    g_assert (BUS_IS_ENGINE_PROXY (engine));
+    g_assert (text != NULL);
+
+    if (!engine->surrounding_text ||
+        g_strcmp0 (text->text, engine->surrounding_text->text) != 0 ||
+        cursor_pos != engine->surrounding_cursor_pos) {
+        if (engine->surrounding_text)
+            g_object_unref (engine->surrounding_text);
+        engine->surrounding_text = (IBusText *) g_object_ref_sink (text);
+        engine->surrounding_cursor_pos = cursor_pos;
+
+        ibus_proxy_call ((IBusProxy *) engine,
+                         "SetSurroundingText",
+                         IBUS_TYPE_TEXT, &text,
+                         G_TYPE_UINT, &cursor_pos,
+                         G_TYPE_INVALID);
+    }
 }
 
 #define DEFINE_FUNCTION(Name, name)                         \

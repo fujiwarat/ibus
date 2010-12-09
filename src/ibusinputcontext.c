@@ -58,11 +58,17 @@ enum {
 /* BusInputContextPriv */
 struct _IBusInputContextPrivate {
     gboolean own;
+
+    /* surrounding text */
+    IBusText *surrounding_text;
+    guint     surrounding_cursor_pos;
 };
 typedef struct _IBusInputContextPrivate IBusInputContextPrivate;
 
 static guint            context_signals[LAST_SIGNAL] = { 0 };
 // static guint            context_signals[LAST_SIGNAL] = { 0 };
+
+static IBusText *text_empty = NULL;
 
 /* functions prototype */
 static void     ibus_input_context_real_destroy (IBusInputContext       *context);
@@ -474,6 +480,9 @@ ibus_input_context_class_init (IBusInputContextClass *klass)
             G_TYPE_NONE,
             1,
             IBUS_TYPE_PROPERTY);
+
+    text_empty = ibus_text_new_from_static_string ("");
+    g_object_ref_sink (text_empty);
 }
 
 static void
@@ -482,6 +491,8 @@ ibus_input_context_init (IBusInputContext *context)
     IBusInputContextPrivate *priv;
     priv = IBUS_INPUT_CONTEXT_GET_PRIVATE (context);
     priv->own = TRUE;
+    priv->surrounding_text = g_object_ref_sink (text_empty);
+    priv->surrounding_cursor_pos = 0;
 }
 
 static void
@@ -494,6 +505,11 @@ ibus_input_context_real_destroy (IBusInputContext *context)
         ibus_proxy_call (IBUS_PROXY (context),
                          "Destroy",
                          G_TYPE_INVALID);
+    }
+
+    if (priv->surrounding_text) {
+        g_object_unref (priv->surrounding_text);
+        priv->surrounding_text = NULL;
     }
 
     IBUS_OBJECT_CLASS(ibus_input_context_parent_class)->destroy (IBUS_OBJECT (context));
@@ -912,6 +928,33 @@ ibus_input_context_property_hide (IBusInputContext *context,
                      "PropertyHide",
                      G_TYPE_STRING, &prop_name,
                      G_TYPE_INVALID);
+}
+
+void
+ibus_input_context_set_surrounding_text (IBusInputContext   *context,
+                                         IBusText           *text,
+                                         guint32             cursor_pos)
+{
+    g_assert (IBUS_IS_INPUT_CONTEXT (context));
+    g_assert (IBUS_IS_TEXT (text));
+
+    IBusInputContextPrivate *priv;
+    priv = IBUS_INPUT_CONTEXT_GET_PRIVATE (context);
+
+    if (priv->surrounding_text == NULL ||
+        g_strcmp0 (text->text, priv->surrounding_text->text) != 0 ||
+        cursor_pos != priv->surrounding_cursor_pos) {
+        if (priv->surrounding_text)
+            g_object_unref (priv->surrounding_text);
+        priv->surrounding_text = (IBusText *) g_object_ref_sink (text);
+        priv->surrounding_cursor_pos = cursor_pos;
+
+        ibus_proxy_call ((IBusProxy *) context,
+                         "SetSurroundingText",
+                         IBUS_TYPE_TEXT, &text,
+                         G_TYPE_UINT, &cursor_pos,
+                         G_TYPE_INVALID);
+    }
 }
 
 gboolean
