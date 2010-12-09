@@ -27,6 +27,7 @@ ibussetup_PYTHON = \
 	enginetreeview.py \
 	engineabout.py \
 	keyboardshortcut.py \
+	xkbsetup.py \
 	$(NULL)
 
 ibussetup_DATA = \

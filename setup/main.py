@@ -37,6 +37,7 @@ from gtk import gdk
 from enginecombobox import EngineComboBox
 from enginetreeview import EngineTreeView
 from engineabout import EngineAbout
+from xkbsetup import XKBSetup
 
 _  = lambda a : gettext.dgettext("ibus", a)
 N_ = lambda a : a
@@ -223,6 +224,8 @@ class Setup(object):
 
         self.__combobox.connect("notify::active-engine", self.__combobox_notify_active_engine_cb)
         self.__treeview.connect("notify", self.__treeview_notify_cb)
+
+        XKBSetup(self.__config, self.__builder)
 
     def __combobox_notify_active_engine_cb(self, combobox, property):
         engine = self.__combobox.get_active_engine()

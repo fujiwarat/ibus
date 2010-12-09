@@ -39,6 +39,12 @@ MEMCONF_DIRS = \
 	$(NULL)
 endif
 
+if ENABLE_XKB
+XKB_DIRS = \
+	xkb \
+	$(NULL)
+endif
+
 SUBDIRS = \
 	src \
 	bus \
@@ -53,6 +59,7 @@ SUBDIRS = \
 	$(PYTHON_DIRS) \
 	$(GCONF_DIRS) \
 	$(MEMCONF_DIRS) \
+	$(XKB_DIRS) \
 	$(NULL)
 
 ACLOCAL_AMFLAGS = -I m4

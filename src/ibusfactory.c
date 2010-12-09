@@ -29,6 +29,7 @@
    (G_TYPE_INSTANCE_GET_PRIVATE ((o), IBUS_TYPE_FACTORY, IBusFactoryPrivate))
 
 enum {
+    LOOKUP_ENGINE_NAME,
     LAST_SIGNAL,
 };
 
@@ -45,6 +46,8 @@ struct _IBusFactoryPrivate {
     GHashTable     *engine_table;
 };
 typedef struct _IBusFactoryPrivate IBusFactoryPrivate;
+
+static guint            factory_signals[LAST_SIGNAL] = { 0 };
 
 /* functions prototype */
 static void     ibus_factory_destroy        (IBusFactory        *factory);
@@ -112,7 +115,16 @@ ibus_factory_class_init (IBusFactoryClass *klass)
                 IBUS_TYPE_CONNECTION,
                 G_PARAM_READWRITE |  G_PARAM_CONSTRUCT_ONLY));
 
-
+    factory_signals[LOOKUP_ENGINE_NAME] =
+        g_signal_new (I_("lookup-engine-name"),
+            G_TYPE_FROM_CLASS (gobject_class),
+            G_SIGNAL_RUN_LAST,
+            G_STRUCT_OFFSET (IBusFactoryClass, lookup_engine_name),
+            NULL, NULL,
+            ibus_marshal_VOID__STRING,
+            G_TYPE_NONE,
+            1,
+            G_TYPE_STRING);
 }
 
 static void
@@ -245,6 +257,9 @@ ibus_factory_ibus_message (IBusFactory    *factory,
             ibus_message_unref (reply_message);
             return TRUE;
         }
+
+        g_signal_emit (factory, factory_signals[LOOKUP_ENGINE_NAME],
+                       0, engine_name);
 
         engine_type = (GType )g_hash_table_lookup (priv->engine_table, engine_name);
 

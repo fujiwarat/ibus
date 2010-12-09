@@ -118,10 +118,13 @@ struct _IBusFactoryClass {
     IBusServiceClass parent;
 
     /* signals */
+    void        (* lookup_engine_name)
+                                    (IBusFactory    *factory,
+                                     const gchar    *engine_name);
 
     /*< private >*/
     /* padding */
-    gpointer pdummy[8];
+    gpointer pdummy[7];
 };
 
 /**
