@@ -630,6 +630,22 @@
                                     <property name="position">4</property>
                                   </packing>
                                 </child>
+                                <child>
+                                  <object class="GtkButton" id="button_engine_reset">
+                                    <property name="label" translatable="yes">Rese_t</property>
+                                    <property name="visible">True</property>
+                                    <property name="sensitive">False</property>
+                                    <property name="can_focus">True</property>
+                                    <property name="receives_default">True</property>
+                                    <property name="tooltip_text" translatable="yes">Reset the default input method in the enabled input methods</property>
+                                    <property name="use_underline">True</property>
+                                  </object>
+                                  <packing>
+                                    <property name="expand">False</property>
+                                    <property name="fill">False</property>
+                                    <property name="position">5</property>
+                                  </packing>
+                                </child>
                               </object>
                             </child>
                           </object>

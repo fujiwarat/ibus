@@ -13,6 +13,33 @@
       </locale>
     </schema>
     <schema>
+      <key>/schemas/desktop/ibus/general/preload_engines_system</key>
+      <applyto>/desktop/ibus/general/preload_engines_system</applyto>
+      <owner>ibus</owner>
+      <type>list</type>
+      <list_type>string</list_type>
+      <locale name="C">
+        <short>Preload engines for system</short>
+	    <long>Preload engines during ibus starts up for system.
+                  This value is not modified by users.
+                  This value is loaded only when preload_engines is NULL</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/desktop/ibus/general/use_preload_engines_system</key>
+      <applyto>/desktop/ibus/general/use_preload_engines_system</applyto>
+      <owner>ibus</owner>
+      <type>bool</type>
+      <default>true</default>
+      <locale name="C">
+        <short>Use preload engines for system</short>
+	    <long>Use preload engines for system.
+                  If false, preload_engines_system is not used and 
+                  preload_engines is shared by users and ibus-daemon and
+                  maybe fast. false is also back compatible.</long>
+      </locale>
+    </schema>
+    <schema>
       <key>/schemas/desktop/ibus/general/hotkey/trigger</key>
       <applyto>/desktop/ibus/general/hotkey/trigger</applyto>
       <owner>ibus</owner>

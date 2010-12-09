@@ -68,6 +68,9 @@ static void     bus_ibus_impl_set_previous_engine
 static void     bus_ibus_impl_set_preload_engines
                                                 (BusIBusImpl        *ibus,
                                                  GValue             *value);
+static void     bus_ibus_impl_set_preload_engines_system
+                                                (BusIBusImpl        *ibus,
+                                                 GValue             *value);
 static void     bus_ibus_impl_set_use_sys_layout
                                                 (BusIBusImpl        *ibus,
                                                  GValue             *value);
@@ -262,6 +265,24 @@ bus_ibus_impl_set_preload_engines (BusIBusImpl *ibus,
 }
 
 static void
+bus_ibus_impl_set_preload_engines_system (BusIBusImpl *ibus,
+                                          GValue      *value)
+{
+    GValue value_user = { 0 };
+
+    if (ibus->config &&
+        ibus_config_get_value (ibus->config,
+                               "general",
+                               "preload_engines",
+                               &value_user)) {
+        bus_ibus_impl_set_preload_engines (ibus, &value_user);
+        g_value_unset (&value_user);
+    } else {
+        bus_ibus_impl_set_preload_engines (ibus, value);
+    }
+}
+
+static void
 bus_ibus_impl_set_use_sys_layout (BusIBusImpl *ibus,
                                   GValue      *value)
 {
@@ -335,6 +356,7 @@ bus_ibus_impl_set_default_preload_engines (BusIBusImpl *ibus)
     g_assert (BUS_IS_IBUS_IMPL (ibus));
 
     static gboolean done = FALSE;
+    gboolean use_preload_engines_system = FALSE;
     GValue value = { 0 };
     GList *engines, *list;
     gchar *lang, *p;
@@ -342,6 +364,11 @@ bus_ibus_impl_set_default_preload_engines (BusIBusImpl *ibus)
 
     if (done || ibus->config == NULL) {
         return;
+    }
+
+    if (ibus_config_get_value (ibus->config, "general", "use_preload_engines_system", &value)) {
+        use_preload_engines_system = g_value_get_boolean (&value);
+        g_value_unset (&value);
     }
 
     if (ibus_config_get_value (ibus->config, "general", "preload_engines", &value)) {
@@ -385,7 +412,13 @@ bus_ibus_impl_set_default_preload_engines (BusIBusImpl *ibus)
         g_value_array_append (array, &name);
     }
     g_value_take_boxed (&value, array);
-    ibus_config_set_value (ibus->config, "general", "preload_engines", &value);
+    if (use_preload_engines_system) {
+        ibus_config_set_value (ibus->config,
+                               "general", "preload_engines_system", &value);
+    } else {
+        ibus_config_set_value (ibus->config,
+                               "general", "preload_engines", &value);
+    }
     g_value_unset (&value);
     g_list_free (engines);
 }
@@ -414,7 +447,7 @@ bus_ibus_impl_reload_config (BusIBusImpl *ibus)
         { "general/hotkey", "prev_engine", bus_ibus_impl_set_previous_engine },
         #endif
         { "general/hotkey", "previous_engine", bus_ibus_impl_set_previous_engine },
-        { "general", "preload_engines", bus_ibus_impl_set_preload_engines },
+        { "general", "preload_engines_system", bus_ibus_impl_set_preload_engines_system },
         { "general", "use_system_keyboard_layout", bus_ibus_impl_set_use_sys_layout },
         { "general", "use_global_engine", bus_ibus_impl_set_use_global_engine },
         { "general", "embed_preedit_text", bus_ibus_impl_set_embed_preedit_text },
@@ -468,6 +501,7 @@ _config_value_changed_cb (IBusConfig  *config,
         #endif
         { "general/hotkey", "previous_engine", bus_ibus_impl_set_previous_engine },
         { "general", "preload_engines",    bus_ibus_impl_set_preload_engines },
+        { "general", "preload_engines_system", bus_ibus_impl_set_preload_engines_system },
         { "general", "use_system_keyboard_layout", bus_ibus_impl_set_use_sys_layout },
         { "general", "use_global_engine", bus_ibus_impl_set_use_global_engine },
         { "general", "embed_preedit_text", bus_ibus_impl_set_embed_preedit_text },

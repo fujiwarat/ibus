@@ -202,6 +202,13 @@ class Setup(object):
         for e in self.__engines:
             tmp_dict[e.name] = e
         engine_names = self.__config.get_value("general", "preload_engines", [])
+        if len(engine_names) == 0:
+            engine_names = self.__config.get_value("general", "preload_engines_system", [])
+            button = self.__builder.get_object("button_engine_reset")
+            button.set_sensitive(False)
+        else:
+            button = self.__builder.get_object("button_engine_reset")
+            button.set_sensitive(True)
         engines = [tmp_dict[name] for name in engine_names if name in tmp_dict]
 
         self.__treeview = self.__builder.get_object("treeview_engines")
@@ -219,6 +226,9 @@ class Setup(object):
 
         button = self.__builder.get_object("button_engine_about")
         button.connect("clicked", self.__button_engine_about_cb)
+
+        button = self.__builder.get_object("button_engine_reset")
+        button.connect("clicked", self.__button_engine_reset_cb)
 
         self.__combobox.connect("notify::active-engine", self.__combobox_notify_active_engine_cb)
         self.__treeview.connect("notify", self.__treeview_notify_cb)
@@ -243,10 +253,14 @@ class Setup(object):
         if property.name == "engines":
             engine_names = map(lambda e: e.name, engines)
             self.__config.set_list("general", "preload_engines", engine_names, "s")
+            button = self.__builder.get_object("button_engine_reset")
+            button.set_sensitive(True)
 
     def __button_engine_add_cb(self, button):
         engine = self.__combobox.get_active_engine()
         self.__treeview.append_engine(engine)
+        button = self.__builder.get_object("button_engine_reset")
+        button.set_sensitive(True)
 
     def __button_engine_about_cb(self, button):
         engine = self.__treeview.get_active_engine()
@@ -254,6 +268,19 @@ class Setup(object):
             about = EngineAbout(engine)
             about.run()
             about.destroy()
+
+    def __button_engine_reset_cb(self, button):
+        self.__config.unset("general", "preload_engines")
+        button = self.__builder.get_object("button_engine_reset")
+        button.set_sensitive(False)
+        message = _("input method engines are reset now.\n"
+                    "Please restart IBus to load the default engines."
+                    )
+        dlg = gtk.MessageDialog(type = gtk.MESSAGE_INFO,
+                                buttons = gtk.BUTTONS_OK,
+                                message_format = message)
+        dlg.run()
+        dlg.destroy()
 
     def __init_bus(self):
         try:
@@ -361,10 +388,14 @@ class Setup(object):
             if engine not in self.__preload_engines:
                 self.__preload_engines.add(engine)
                 self.__config.set_list("general", "preload_engines", list(self.__preload_engines), "s")
+                button = self.__builder.get_object("button_engine_reset")
+                button.set_sensitive(True)
         else:
             if engine in self.__preload_engines:
                 self.__preload_engines.remove(engine)
                 self.__config.set_list("general", "preload_engines", list(self.__preload_engines), "s")
+                button = self.__builder.get_object("button_engine_reset")
+                button.set_sensitive(True)
 
         # set new value
         model.set(iter, COLUMN_PRELOAD, data[DATA_PRELOAD])
