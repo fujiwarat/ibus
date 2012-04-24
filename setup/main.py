@@ -227,6 +227,7 @@ class Setup(object):
         button.connect("toggled", self.__checkbutton_preload_engine_mode_toggled_cb)
         self.__engines = self.__bus.list_engines()
         self.__combobox = self.__builder.get_object("combobox_engines")
+        self.__combobox.set_config(self.__config)
         self.__combobox.set_engines(self.__engines)
 
         engines = self.__bus.list_active_engines()
