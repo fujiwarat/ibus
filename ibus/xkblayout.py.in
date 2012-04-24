@@ -1,0 +1,360 @@
+# vim:set et sts=4 sw=4:
+#
+# ibus - The Input Bus
+#
+# Copyright (c) 2011 Takao Fujiwara <takao.fujiwara1@gmail.com>
+# Copyright (c) 2011 Peng Huang <shawn.p.huang@gmail.com>
+# Copyright (c) 2011 Red Hat, Inc.
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this program; if not, write to the
+# Free Software Foundation, Inc., 59 Temple Place, Suite 330,
+# Boston, MA  02111-1307  USA
+
+__all__ = (
+        'XKBLayout',
+    )
+
+import os, sys, time
+import glib
+
+XKB_COMMAND = @XKB_COMMAND@
+XKB_SESSION_TIME_OUT = 30.0
+XMODMAP_CMD = 'xmodmap'
+XMODMAP_KNOWN_FILES = ['.xmodmap', '.xmodmaprc', '.Xmodmap', '.Xmodmaprc']
+
+class XKBLayout():
+    def __init__(self, config = None, command=XKB_COMMAND):
+        self.__config = config
+        self.__command = command
+        self.__use_xkb = True
+        self.__xkb_pid = None
+        self.__xmodmap_pid = None
+        self.__use_xmodmap = True
+        if self.__command == None:
+            self.__use_xkb = False
+        self.__default_layout = self.get_layout()
+        self.__default_model = self.get_model()
+        self.__default_option = self.get_option()
+        self.__time_lag_session_xkb_layout = True
+        self.__time_lag_session_xkb_option = True
+        self.__time_lag_session_xkb_timer = time.time()
+        self.__xkb_latin_layouts = []
+        if config != None:
+            self.__xkb_latin_layouts = list(self.__config.get_value('general',
+                                                                    'xkb_latin_layouts',
+                                                                    []))
+            self.__use_xmodmap = bool(self.__config.get_value('general',
+                                                              'use_xmodmap',
+                                                              True))
+
+
+    def __get_model_from_layout(self, layout):
+        left_bracket = layout.find('(')
+        right_bracket = layout.find(')')
+        if left_bracket >= 0 and right_bracket > left_bracket:
+            return (layout[:left_bracket] + layout[right_bracket + 1:], \
+                    layout[left_bracket + 1:right_bracket])
+        return (layout, 'default')
+
+    def __get_option_from_layout(self, layout):
+        left_bracket = layout.find('[')
+        right_bracket = layout.find(']')
+        if left_bracket >= 0 and right_bracket > left_bracket:
+            return (layout[:left_bracket] + layout[right_bracket + 1:], \
+                    layout[left_bracket + 1:right_bracket])
+        return (layout, 'default')
+
+    def __get_output_from_cmdline(self, arg, string):
+        exec_command = '%s %s' % (self.__command, arg)
+        retval = None
+        for line in os.popen(exec_command).readlines():
+            line = line.strip()
+            if line.startswith(string):
+                retval = line[len(string):]
+                break
+        return retval
+
+    def __get_userhome(self):
+        if 'HOME' not in os.environ:
+            import pwd
+            userhome = pwd.getpwuid(os.getuid()).pw_dir
+        else:
+            userhome = os.environ['HOME']
+        userhome = userhome.rstrip('/')
+        return userhome
+
+    def __get_fullpath(self, command):
+        if 'PATH' in os.environ:
+            envpath = os.environ['PATH']
+        else:
+            envpath = os.defpath
+        PATH = envpath.split(os.pathsep)
+        for dir in PATH:
+            filepath = os.path.join(dir, command)
+            if os.path.exists(filepath):
+                return filepath
+        return None
+
+    def __set_layout_cb(self, pid, status):
+        if self.__xkb_pid != pid:
+            print >> sys.stderr, \
+                'ibus.xkblayout: set_layout_cb has another pid'
+            return
+        self.__xkb_pid.close()
+        self.__xkb_pid = None
+        self.set_xmodmap()
+
+    def __set_xmodmap_cb(self, pid, status):
+        if self.__xmodmap_pid != pid:
+            print >> sys.stderr, \
+                'ibus.xkblayout: set_xmodmap_cb has another pid'
+            return
+        self.__xmodmap_pid.close()
+        self.__xmodmap_pid = None
+
+    def use_xkb(self, enable):
+        if self.__command == None:
+            return
+        self.__use_xkb = enable
+
+    def get_layout(self):
+        if not self.__use_xkb:
+            return None
+        return self.__get_output_from_cmdline('--get', 'layout: ')
+
+    def get_model(self):
+        if not self.__use_xkb:
+            return None
+        return self.__get_output_from_cmdline('--get', 'model: ')
+
+    def get_option(self):
+        if not self.__use_xkb:
+            return None
+        return self.__get_output_from_cmdline('--get', 'option: ')
+
+    def get_group(self):
+        if not self.__use_xkb:
+            return 0
+        return int(self.__get_output_from_cmdline('--get-group', 'group: '))
+
+    def set_layout(self, layout='default', model='default', option='default'):
+        if not self.__use_xkb:
+            return
+        if layout == None:
+            return
+        if self.__default_layout == None:
+            # Maybe opening display was failed in constructor.
+            self.reload_default_layout()
+        if self.__default_layout == None:
+            return
+        layout = str(layout)
+        # if set_default_layout() is not default, the default layout is
+        # pulled from the current XKB. But it's possible gnome-settings-daemon
+        # does not run yet. I added XKB_SESSION_TIME_OUT for the timer.
+        if self.__time_lag_session_xkb_layout == True:
+            self.__default_layout = self.get_layout()
+            self.__default_model = self.get_model()
+        if self.__time_lag_session_xkb_option == True:
+            self.__default_option = self.get_option()
+        if (self.__time_lag_session_xkb_layout == True or \
+            self.__time_lag_session_xkb_option == True ) and \
+           (time.time() - self.__time_lag_session_xkb_timer \
+            > XKB_SESSION_TIME_OUT):
+            self.__time_lag_session_xkb_layout = False
+            self.__time_lag_session_xkb_option = False
+        if layout == 'default':
+            layout = self.__default_layout
+        else:
+            self.__time_lag_session_xkb_layout = False
+        if model != None:
+            model = str(model)
+            if model == 'default':
+                (layout, model) = self.__get_model_from_layout(layout)
+            if model == 'default':
+                model = self.__default_model
+            else:
+                self.__time_lag_session_xkb_layout = False
+        if option != None:
+            option = str(option)
+            if option == 'default':
+                (layout, engine_option) = self.__get_option_from_layout(layout)
+                if engine_option != None and engine_option != 'default':
+                    option = self.__default_option
+                    if option == None:
+                        option = engine_option
+                    else:
+                        option = '%s,%s' % (option, engine_option)
+                    self.__time_lag_session_xkb_option = False
+            if option == 'default':
+                option = self.__default_option
+        need_us_layout = False
+        for latin_layout in self.__xkb_latin_layouts:
+            latin_layout = str(latin_layout)
+            # layout 'in' and model 'eng' is English layout.
+            if layout == latin_layout and model != 'eng':
+                need_us_layout = True
+                break
+            if model != None and layout + '(' + model + ')' == latin_layout:
+                need_us_layout = True
+                break
+        if need_us_layout:
+            layout = layout + ',us'
+            if model != None:
+                model = model + ','
+        if layout == self.get_layout() and \
+           model == self.get_model() and \
+           option == self.get_option():
+            return
+        args = []
+        args.append(self.__command)
+        args.append('--layout')
+        args.append(layout)
+        if model != None:
+            args.append('--model')
+            args.append(model)
+        if option != None:
+            args.append('--option')
+            args.append(option)
+        pid = glib.spawn_async(argv=args,
+                               flags=glib.SPAWN_DO_NOT_REAP_CHILD)[0]
+        self.__xkb_pid = pid
+        glib.child_watch_add(self.__xkb_pid, self.__set_layout_cb)
+
+    def set_default_layout(self, layout='default', model='default'):
+        if not self.__use_xkb:
+            return
+        if layout == None:
+            print >> sys.stderr, 'ibus.xkblayout: None layout'
+            return
+        if model == None:
+            print >> sys.stderr, 'ibus.xkblayout: None model'
+            return
+        if layout == 'default':
+            self.__default_layout = self.get_layout()
+            self.__default_model = self.get_model()
+        else:
+            if model == 'default':
+                (layout, model) = self.__get_model_from_layout(layout)
+            self.__default_layout = layout
+            self.__time_lag_session_xkb_layout = False
+            if model == 'default':
+                self.__default_model = None
+            else:
+                self.__default_model = model
+
+    def set_default_option(self, option='default'):
+        if not self.__use_xkb:
+            return
+        if option == None:
+            print >> sys.stderr, 'ibus.xkblayout: None option'
+            return
+        if option == 'default':
+            self.__default_option = self.get_option()
+        else:
+            self.__default_option = option
+            self.__time_lag_session_xkb_option = False
+
+    def get_default_layout(self):
+        return [self.__default_layout, self.__default_model];
+
+    def get_default_option(self):
+        return self.__default_option
+
+    def reload_default_layout(self):
+        if not self.__use_xkb:
+            return
+        self.__default_layout = self.get_layout()
+        self.__default_model = self.get_model()
+        self.__default_option = self.get_option()
+
+    def set_xmodmap(self):
+        if not self.__use_xmodmap:
+            return
+        if self.__xmodmap_pid != None:
+            return
+        xmodmap_cmdpath = self.__get_fullpath(XMODMAP_CMD)
+        if xmodmap_cmdpath == None:
+            xmodmap_cmdpath = XMODMAP_CMD
+        for xmodmap_file in XMODMAP_KNOWN_FILES:
+            xmodmap_filepath = os.path.join(self.__get_userhome(), xmodmap_file)
+            if not os.path.exists(xmodmap_filepath):
+                continue
+            pid = glib.spawn_async(argv=[xmodmap_cmdpath, xmodmap_filepath],
+                                   flags=glib.SPAWN_DO_NOT_REAP_CHILD)[0]
+            self.__xmodmap_pid = pid
+            glib.child_watch_add(self.__xmodmap_pid, self.__set_xmodmap_cb)
+            break
+
+
+def test():
+    import gtk
+    import ibus
+
+    window = None
+    config = None
+    xkblayout = None
+
+    def __destroy(*args):
+        window.hide()
+        gtk.main_quit()
+
+    def __test_set_session_xkb(button):
+        xkblayout.set_layout('default')
+        print 'Reset the default keymap'
+        print 'Layout:', xkblayout.get_default_layout()
+        print 'Option:', xkblayout.get_default_option()
+
+    def __test_set_user_xkb(button):
+        layout = 'us'
+        model = 'default'
+        option = 'default'
+        if len(sys.argv) > 1:
+            layout = sys.argv[1]
+        if len(sys.argv) > 2:
+            model = sys.argv[2]
+            if model == 'None':
+                model = None
+        if len(sys.argv) > 3:
+            option = sys.argv[3]
+            if option == 'None':
+                optoin = None
+        xkblayout.set_layout(layout, model, option)
+        print 'Test set_layout:', layout, model, option
+
+    if ibus.get_address() != None:
+        bus = ibus.Bus()
+        config = bus.get_config()
+    else:
+        print 'no ibus'
+    xkblayout = XKBLayout(config)
+    print 'Layout:', xkblayout.get_default_layout()
+    print 'Option:', xkblayout.get_default_option()
+    window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+    window.connect('destroy', __destroy)
+    vb = gtk.VBox()
+    window.add(vb)
+    b = gtk.Button('Test xkb')
+    b.connect('clicked', __test_set_user_xkb)
+    vb.add(b)
+    b = gtk.Button('Reset the default xkb')
+    b.connect('clicked', __test_set_session_xkb)
+    vb.add(b)
+    window.show_all()
+    if config != None:
+        ibus.main()
+    else:
+        gtk.main()
+
+if __name__ == '__main__':
+    test()

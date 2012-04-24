@@ -43,6 +43,7 @@ class EngineComboBox(gtk.ComboBox):
         self.connect("notify::active", self.__notify_active_cb)
 
         self.__model = None
+        self.__title = _("Select an input method")
 
         renderer = gtk.CellRendererPixbuf()
         renderer.set_property("xalign", 0)
@@ -117,7 +118,7 @@ class EngineComboBox(gtk.ComboBox):
             renderer.set_property("weight", pango.WEIGHT_NORMAL)
         elif isinstance(engine, int):
             renderer.set_property("sensitive", True)
-            renderer.set_property("text", _("Select an input method"))
+            renderer.set_property("text", self.__title)
             renderer.set_property("weight", pango.WEIGHT_NORMAL)
         else:
             renderer.set_property("sensitive", True)
@@ -140,5 +141,9 @@ class EngineComboBox(gtk.ComboBox):
     def get_active_engine(self):
         return self.get_property("active-engine")
 
+    def get_title(self):
+        return self.__title
 
+    def set_title(self, title):
+        self.__title = title
 

@@ -42,6 +42,12 @@ DAEMON_DIRS =       \
 	$(NULL)
 endif
 
+if ENABLE_XKB
+XKB_DIRS =          \
+	xkb             \
+	$(NULL)
+endif
+
 if ENABLE_MEMCONF
 MEMCONF_DIRS = \
 	memconf \
@@ -66,6 +72,7 @@ SUBDIRS =           \
 	$(DAEMON_DIRS)  \
 	$(PYTHON_DIRS)  \
 	$(GCONF_DIRS)   \
+	$(XKB_DIRS)     \
 	$(MEMCONF_DIRS) \
 	$(DCONF_DIRS)   \
 	$(NULL)

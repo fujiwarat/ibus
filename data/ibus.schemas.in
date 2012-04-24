@@ -191,6 +191,53 @@
       </locale>
     </schema>
     <schema>
+      <key>/schemas/desktop/ibus/general/system_keyboard_layout</key>
+      <applyto>/desktop/ibus/general/system_keyboard_layout</applyto>
+      <owner>ibus</owner>
+      <type>string</type>
+      <default>default</default>
+      <gettext_domain>ibus</gettext_domain>
+      <locale name="C">
+        <short>Set system keyboard layout</short>
+            <long>Override default system keyboard layout. default is 'default'</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/desktop/ibus/general/system_keyboard_option</key>
+      <applyto>/desktop/ibus/general/system_keyboard_option</applyto>
+      <owner>ibus</owner>
+      <type>string</type>
+      <default>default</default>
+      <gettext_domain>ibus</gettext_domain>
+      <locale name="C">
+        <short>Set system keyboard option</short>
+            <long>Override default system keyboard option. default is 'default'</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/desktop/ibus/general/use_xmodmap</key>
+      <applyto>/desktop/ibus/general/use_xmodmap</applyto>
+      <owner>ibus</owner>
+      <type>bool</type>
+      <default>true</default>
+      <locale name="C">
+        <short>Use xmodmap</short>
+           <long>Run xmodmap if .xmodmap/.Xmodmap exists.</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/desktop/ibus/general/xkb_latin_layouts</key>
+      <applyto>/desktop/ibus/general/xkb_latin_layouts</applyto>
+      <owner>ibus</owner>
+      <type>list</type>
+      <list_type>string</list_type>
+      <default>[ara,bg,cz,dev,gr,gur,in,jp(kana),mal,mkd,ru,ua]</default>
+      <locale name="C">
+        <short>Latin layout which have no ASCII</short>
+	    <long>us layout is appended to the latin layouts. variant is not needed.</long>
+      </locale>
+    </schema>
+    <schema>
       <key>/schemas/desktop/ibus/panel/use_custom_font</key>
       <applyto>/desktop/ibus/panel/use_custom_font</applyto>
       <owner>ibus</owner>

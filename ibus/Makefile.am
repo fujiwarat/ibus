@@ -58,12 +58,38 @@ nodist_ibus_PYTHON = \
 
 ibusdir = @pkgpythondir@
 
+xkblayout_py_in_files = \
+	xkblayout.py.in \
+	xkbxml.py.in \
+	$(NULL)
+xkblayout_py_DATA = $(xkblayout_py_in_files:.py.in=.py)
+xkblayout_pydir = @pkgpythondir@
+
+ibus_PYTHON += $(xkblayout_py_DATA)
+
+if ENABLE_XKB
+XKB_COMMAND=\\\"$(libexecdir)/ibus-xkb\\\"
+HAVE_XKB=True
+else
+XKB_COMMAND="None"
+HAVE_XKB=False
+endif
+
+%.py : %.py.in
+	@sed -e "s|\@XKB_COMMAND\@|$(XKB_COMMAND)|g" \
+	     -e "s|\@XKB_RULES_XML_FILE\@|$(XKB_RULES_XML_FILE)|g" \
+	     -e "s|\@HAVE_XKB\@|$(HAVE_XKB)|g" \
+	     -e "s|\@datadir\@|$(datadir)|g" \
+	$< > $@
+
 EXTRA_DIST = \
 	_config.py.in \
+	$(xkblayout_py_in_files) \
 	$(NULL)
 
 CLEANFILES = \
 	*.pyc \
+	$(xkblayout_py_DATA) \
 	$(NULL)
 
 DISTCLEANFILES = \

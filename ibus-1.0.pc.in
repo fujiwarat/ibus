@@ -4,6 +4,8 @@ libdir=@libdir@
 includedir=@includedir@
 datadir=@datadir@
 pkgdatadir=@datadir@/ibus
+have_ibus_xkb=@HAVE_IBUS_XKB@
+ibus_xkb=@libexecdir@/ibus-xkb
 
 Name: IBus
 Description: IBus Library

@@ -132,6 +132,22 @@ class Panel(ibus.PanelBase):
         self.__config_load_show_im_name()
         # self.__bus.request_name(ibus.panel.IBUS_SERVICE_PANEL, 0)
 
+        # init xkb
+        self.__xkblayout = ibus.XKBLayout(self.__config)
+        use_xkb = self.__config.get_value("general", "use_system_keyboard_layout", False)
+        if not use_xkb:
+            self.__xkblayout.use_xkb(use_xkb)
+        value = str(self.__config.get_value("general", "system_keyboard_layout", ''))
+        if value == '':
+            value = 'default'
+        if value != 'default':
+            self.__xkblayout.set_default_layout(value)
+        value = str(self.__config.get_value("general", "system_keyboard_option", ''))
+        if value == '':
+            value = 'default'
+        if value != 'default':
+            self.__xkblayout.set_default_option(value)
+
     def set_cursor_location(self, x, y, w, h):
         self.__candidate_panel.set_cursor_location(x, y, w, h)
 
@@ -226,14 +242,20 @@ class Panel(ibus.PanelBase):
         if not enabled:
             self.__set_im_icon(ICON_KEYBOARD)
             self.__set_im_name(None)
+            if self.__bus.get_use_sys_layout():
+                self.__xkblayout.set_layout()
         else:
             engine = self.__focus_ic.get_engine()
             if engine:
                 self.__set_im_icon(engine.icon)
                 self.__set_im_name(engine.longname)
+                if self.__bus.get_use_sys_layout():
+                    self.__xkblayout.set_layout(self.__engine_get_layout_wrapper(engine))
             else:
                 self.__set_im_icon(ICON_KEYBOARD)
                 self.__set_im_name(None)
+                if self.__bus.get_use_sys_layout():
+                    self.__xkblayout.set_layout()
         self.__language_bar.focus_in()
 
     def focus_out(self, ic):
@@ -243,6 +265,8 @@ class Panel(ibus.PanelBase):
         self.__language_bar.focus_out()
         self.__set_im_icon(ICON_KEYBOARD)
         self.__set_im_name(None)
+        if self.__bus.get_use_sys_layout():
+            self.__xkblayout.set_layout()
 
     def state_changed(self):
         if not self.__focus_ic:
@@ -255,14 +279,20 @@ class Panel(ibus.PanelBase):
             self.reset()
             self.__set_im_icon(ICON_KEYBOARD)
             self.__set_im_name(None)
+            if self.__bus.get_use_sys_layout():
+                self.__xkblayout.set_layout()
         else:
             engine = self.__focus_ic.get_engine()
             if engine:
                 self.__set_im_icon(engine.icon)
                 self.__set_im_name(engine.longname)
+                if self.__bus.get_use_sys_layout():
+                    self.__xkblayout.set_layout(self.__engine_get_layout_wrapper(engine))
             else:
                 self.__set_im_icon(ICON_KEYBOARD)
                 self.__set_im_name(None)
+                if self.__bus.get_use_sys_layout():
+                    self.__xkblayout.set_layout()
 
 
     def reset(self):
@@ -542,3 +572,14 @@ class Panel(ibus.PanelBase):
                                flags=glib.SPAWN_DO_NOT_REAP_CHILD)[0]
         self.__setup_pid = pid
         glib.child_watch_add(self.__setup_pid, self.__child_watch_cb)
+
+    def __engine_get_layout_wrapper(self, engine):
+        # This code is for the back compatibility.
+        # Should we remove the codes after all IM engines are changed
+        # to "default" layout?
+        if engine.name != None and engine.name.startswith("xkb:layout:"):
+            return engine.layout
+        elif engine.layout != None and engine.layout.startswith("default"):
+            return engine.layout
+        else:
+            return "default"

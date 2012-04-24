@@ -41,4 +41,6 @@ from text import *
 from observedpath import *
 from enginedesc import *
 from component import *
+from xkblayout import *
+from xkbxml import *
 from _config import *
