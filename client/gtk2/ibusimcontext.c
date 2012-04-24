@@ -589,6 +589,14 @@ ibus_im_context_init (GObject *obj)
 #else
     ibusimcontext->caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
 #endif
+    if (!g_getenv ("IBUS_GNOME_SHELL_ENABLE_PREEDIT_TEXT")) {
+        const gchar * prgname = g_get_prgname ();
+        if (g_strcmp0 (prgname, "gnome-shell") == 0) {
+            if (ibusimcontext->caps | IBUS_CAP_PREEDIT_TEXT) {
+                ibusimcontext->caps ^= IBUS_CAP_PREEDIT_TEXT;
+            }
+        }
+    }
 
 
     // Create slave im context
