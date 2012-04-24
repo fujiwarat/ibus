@@ -45,6 +45,7 @@
 #include <ibuskeys.h>
 #include <ibusenumtypes.h>
 #include <ibushotkey.h>
+#include <ibusxkbxml.h>
 #include <ibusxml.h>
 #include <ibusenginedesc.h>
 #include <ibusobservedpath.h>

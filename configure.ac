@@ -224,6 +224,60 @@ else
     enable_xim="no (disabled, use --enable-xim to enable)"
 fi
 
+AC_ARG_ENABLE(xkb,
+    AS_HELP_STRING([--disable-xkb],
+                   [Do not build xkb]),
+    [enable_xkb=$enableval],
+    [enable_xkb=yes]
+)
+
+AM_CONDITIONAL([ENABLE_XKB], [test x"$enable_xkb" = x"yes"])
+if test x"$enable_xkb" = x"yes"; then
+    PKG_CHECK_MODULES(X11, [
+        x11
+    ])
+    PKG_CHECK_MODULES(XKB,
+        [xkbfile],,
+        [XKB_LIBS="-lxkbfile"]
+    )
+    AC_DEFINE(HAVE_XKB, 1, [define to 1 if you have xkbfile])
+    HAVE_IBUS_XKB=true
+else
+    enable_xkb="no (disabled, use --enable-xkb to enable)"
+    HAVE_IBUS_XKB=false
+fi
+AC_SUBST(HAVE_IBUS_XKB)
+
+# define XKB rules file
+AC_ARG_WITH(xkb-rules-xml,
+    AS_HELP_STRING([--with-xkb-rules-xml[=$DIR/evdev.xml]],
+        [Set evdev.xml file path (default: /usr/share/X11/xkb/rules/evdev.xml)]),
+    XKB_RULES_XML_FILE=$with_xkb_rules_xml,
+    XKB_RULES_XML_FILE="/usr/share/X11/xkb/rules/evdev.xml"
+)
+AC_DEFINE_UNQUOTED(XKB_RULES_XML_FILE, "$XKB_RULES_XML_FILE",
+    [Define file path of evdev.xml])
+AC_SUBST(XKB_RULES_XML_FILE)
+
+# define XKB preload layouts
+AC_ARG_WITH(xkb-preload-layouts,
+    AS_HELP_STRING([--with-xkb-preload-layouts[=layout,...]],
+        [Set preload xkb layouts (default: us,fr,de,...)]),
+    XKB_PRELOAD_LAYOUTS=$with_xkb_preload_layouts,
+    [XKB_PRELOAD_LAYOUTS=""\
+"us,us(chr),us(dvorak),ad,al,am,ara,az,ba,bd,be,bg,br,bt,by,"\
+"de,dk,ca,ch,cn(tib),cz,ee,epo,es,et,fi,fo,fr,"\
+"gb,ge,ge(dsb),ge(ru),ge(os),gh,gh(akan),gh(ewe),gh(fula),gh(ga),gh(hausa),"\
+"gn,gr,hu,hr,ie,ie(CloGaelach),il,"\
+"in,in(ben),in(guj),in(guru),in(jhelum),in(kan),in(mal),in(ori),in(tam),"\
+"in(tel),in(urd-phonetic),in(bolnagri),iq,iq(ku),ir,ir(ku),is,it,"\
+"kg,kh,kz,la,latam,lk,lk(tam_unicode),lt,lv,ma,ma(tifinagh),mal,mao,"\
+"me,mk,mm,mt,mv,ng,ng(hausa),ng,ng(igbo),ng(yoruba),nl,no,no(smi),np,"\
+"pk,pl,pl(csb),pt,ro,rs,ru,ru(cv),ru(kom),ru(sah),ru(tt),ru(xal),"\
+"se,si,sk,sy,sy(ku),th,tj,tr,ua,uz,vn"]
+)
+AC_SUBST(XKB_PRELOAD_LAYOUTS)
+
 # GObject introspection
 GOBJECT_INTROSPECTION_CHECK([0.6.8])
 
@@ -481,6 +535,7 @@ bindings/Makefile
 bindings/vala/Makefile
 dconf/Makefile
 dconf/dconf.xml.in
+xkb/Makefile
 ])
 
 AC_OUTPUT
@@ -496,6 +551,7 @@ Build options:
   Build gtk2 immodule       $enable_gtk2
   Build gtk3 immodule       $enable_gtk3
   Build XIM agent server    $enable_xim
+  Build XKB                 $enable_xkb
   Build python modules      $enable_python
   Build gconf modules       $enable_gconf
   Build memconf modules     $enable_memconf
