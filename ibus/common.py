@@ -40,6 +40,8 @@ __all__ = (
         "BUS_REQUEST_NAME_REPLY_IN_QUEUE",
         "BUS_REQUEST_NAME_REPLY_EXISTS",
         "BUS_REQUEST_NAME_REPLY_ALREADY_OWNER",
+        "PRELOAD_ENGINE_MODE_USER",
+        "PRELOAD_ENGINE_MODE_LANG_RELATIVE",
         "default_reply_handler",
         "default_error_handler",
         "DEFAULT_ASYNC_HANDLERS",
@@ -149,6 +151,10 @@ BUS_REQUEST_NAME_REPLY_PRIMARY_OWNER = 1
 BUS_REQUEST_NAME_REPLY_IN_QUEUE      = 2
 BUS_REQUEST_NAME_REPLY_EXISTS        = 3
 BUS_REQUEST_NAME_REPLY_ALREADY_OWNER = 4
+
+# define preload engine mode
+PRELOAD_ENGINE_MODE_USER          = 0
+PRELOAD_ENGINE_MODE_LANG_RELATIVE = 1
 
 def default_reply_handler( *args):
     pass

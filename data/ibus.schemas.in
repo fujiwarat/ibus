@@ -6,11 +6,24 @@
       <applyto>/desktop/ibus/general/preload_engines</applyto>
       <owner>ibus</owner>
       <type>list</type>
-      <default>[]</default>
+      <default>[ibus_null_engine]</default>
       <list_type>string</list_type>
       <locale name="C">
         <short>Preload engines</short>
 	    <long>Preload engines during ibus starts up</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/desktop/ibus/general/preload_engine_mode</key>
+      <applyto>/desktop/ibus/general/preload_engine_mode</applyto>
+      <owner>ibus</owner>
+      <type>int</type>
+      <default>0</default>
+      <locale name="C">
+        <short>Preload engine mode</short>
+           <long>Preload engines are loaded with this mode.
+                 0 = user customized engines.
+                 1 = language related engines.</long>
       </locale>
     </schema>
     <schema>

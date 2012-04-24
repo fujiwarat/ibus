@@ -142,6 +142,9 @@ static void     bus_ibus_impl_set_previous_engine
 static void     bus_ibus_impl_set_preload_engines
                                                 (BusIBusImpl        *ibus,
                                                  GVariant           *value);
+static void     bus_ibus_impl_set_preload_engine_mode
+                                                (BusIBusImpl        *ibus,
+                                                 GVariant           *value);
 static void     bus_ibus_impl_set_use_sys_layout
                                                 (BusIBusImpl        *ibus,
                                                  GVariant           *value);
@@ -283,6 +286,269 @@ _panel_destroy_cb (BusPanelProxy *panel,
 }
 
 static void
+_config_set_value_done (GObject      *object,
+                        GAsyncResult *res,
+                        gpointer      user_data)
+{
+    IBusConfig *config = (IBusConfig *) object;
+    GVariant *value = (GVariant *) user_data;
+    GError *error = NULL;
+
+    g_assert (IBUS_IS_CONFIG (config));
+
+    if (!ibus_config_set_value_async_finish (config, res, &error)) {
+        if (error) {
+            g_error_free (error);
+        }
+    }
+    g_variant_unref (value);
+}
+
+#ifndef OS_CHROMEOS
+static gint
+_engine_desc_cmp (IBusEngineDesc *desc1,
+                  IBusEngineDesc *desc2)
+{
+    return - ((gint) ibus_engine_desc_get_rank (desc1)) +
+              ((gint) ibus_engine_desc_get_rank (desc2));
+}
+#endif
+
+#ifndef OS_CHROMEOS
+static gint
+_get_config_preload_engine_mode (BusIBusImpl *ibus)
+{
+    GVariant *variant = NULL;
+    gint preload_engine_mode = IBUS_PRELOAD_ENGINE_MODE_USER;
+
+    g_assert (BUS_IS_IBUS_IMPL (ibus));
+
+    if (ibus->config == NULL) {
+        return preload_engine_mode;
+    }
+
+    variant = ibus_config_get_value (ibus->config, "general",
+                                     "preload_engines");
+    if (variant != NULL && g_variant_classify (variant) == G_VARIANT_CLASS_ARRAY) {
+        GVariantIter iter;
+        const gchar *engine_name = NULL;
+        g_variant_iter_init (&iter, variant);
+        g_variant_iter_loop (&iter, "&s", &engine_name);
+        if (g_strcmp0 (engine_name, "ibus_null_engine") == 0) {
+            g_variant_unref (variant);
+            variant = NULL;
+        }
+    }
+    if (variant == NULL) {
+        /* Set LANG_RELATIVE mode for the initial login */
+        preload_engine_mode = IBUS_PRELOAD_ENGINE_MODE_LANG_RELATIVE;
+        variant = g_variant_ref_sink (g_variant_new ("i", preload_engine_mode));
+        ibus_config_set_value_async (ibus->config, "general",
+                                     "preload_engine_mode", variant,
+                                     -1,
+                                     NULL,
+                                     _config_set_value_done,
+                                     variant);
+        return preload_engine_mode;
+    } else {
+        g_variant_unref (variant);
+    }
+
+    variant = ibus_config_get_value (ibus->config, "general",
+                                     "preload_engine_mode");
+    if (variant != NULL) {
+        if (g_variant_classify (variant) == G_VARIANT_CLASS_INT32) {
+            preload_engine_mode = g_variant_get_int32 (variant);
+        }
+        g_variant_unref (variant);
+    }
+
+    return preload_engine_mode;
+}
+#endif
+
+static int
+_compare_engine_list_value (GVariant *value_a, GVariant *value_b)
+{
+    GVariant *value;
+    GVariantIter iter;
+    const gchar *engine_name = NULL;
+    gchar *concat_engine_names;
+    gchar *concat_engine_names_a = NULL;
+    gchar *concat_engine_names_b = NULL;
+    int retval = 0;
+
+    value = value_a;
+    concat_engine_names = NULL;
+    if (value != NULL && g_variant_classify (value) == G_VARIANT_CLASS_ARRAY) {
+        g_variant_iter_init (&iter, value);
+        while (g_variant_iter_loop (&iter, "&s", &engine_name)) {
+            gchar *tmp = g_strdup_printf ("%s::%s",
+                                          concat_engine_names ? concat_engine_names : "",
+                                          engine_name ? engine_name : "");
+            g_free (concat_engine_names);
+            concat_engine_names = tmp;
+        }
+    }
+    concat_engine_names_a = concat_engine_names;
+
+    value = value_b;
+    concat_engine_names = NULL;
+    if (value != NULL && g_variant_classify (value) == G_VARIANT_CLASS_ARRAY) {
+        g_variant_iter_init (&iter, value);
+        while (g_variant_iter_loop (&iter, "&s", &engine_name)) {
+            gchar *tmp = g_strdup_printf ("%s::%s",
+                                          concat_engine_names ? concat_engine_names : "",
+                                          engine_name ? engine_name : "");
+            g_free (concat_engine_names);
+            concat_engine_names = tmp;
+        }
+    }
+    concat_engine_names_b = concat_engine_names;
+
+    retval = g_strcmp0 (concat_engine_names_a, concat_engine_names_b);
+    g_free (concat_engine_names_a);
+    g_free (concat_engine_names_b);
+    return retval;
+}
+
+static void
+_preload_engines_config_get_value_done (GObject      *object,
+                                        GAsyncResult *res,
+                                        gpointer      user_data)
+{
+    IBusConfig *config = (IBusConfig *) object;
+    GVariant *new_value = (GVariant *) user_data;
+    GVariant *value = NULL;
+    GError *error = NULL;
+
+    g_assert (IBUS_IS_CONFIG (config));
+
+    value = ibus_config_get_value_async_finish (config, res, &error);
+    if (error) {
+        g_error_free (error);
+    }
+    if (_compare_engine_list_value (value, new_value) != 0) {
+        ibus_config_set_value_async (config, "general",
+                                     "preload_engines", new_value,
+                                     -1,
+                                     NULL,
+                                     _config_set_value_done,
+                                     new_value);
+    } else if (new_value) {
+        g_variant_unref (new_value);
+    }
+    if (value) {
+        g_variant_unref (value);
+    }
+}
+
+static void
+_set_preload_engines (BusIBusImpl *ibus,
+                      GVariant    *value)
+{
+    GList *engine_list = NULL;
+
+    g_assert (BUS_IS_IBUS_IMPL (ibus));
+
+    g_list_foreach (ibus->engine_list, (GFunc) g_object_unref, NULL);
+    g_list_free (ibus->engine_list);
+
+    if (value != NULL && g_variant_classify (value) == G_VARIANT_CLASS_ARRAY) {
+        GVariantIter iter;
+        g_variant_iter_init (&iter, value);
+        const gchar *engine_name = NULL;
+        while (g_variant_iter_loop (&iter, "&s", &engine_name)) {
+            IBusEngineDesc *engine = bus_registry_find_engine_by_name (ibus->registry, engine_name);
+            if (engine == NULL || g_list_find (engine_list, engine) != NULL)
+                continue;
+            engine_list = g_list_append (engine_list, engine);
+        }
+
+        if (engine_list != NULL &&
+            ibus->config != NULL) {
+            /* sync function will effects the startup performance.
+             * We'd always like to save the value so that ibus-setup
+             * get the updated engine list. */
+            ibus_config_get_value_async (ibus->config, "general",
+                                         "preload_engines",
+                                         -1,
+                                         NULL,
+                                         _preload_engines_config_get_value_done,
+                                         g_variant_ref_sink (value));
+        } else {
+            /* We don't update preload_engines with an empty string for safety.
+             * Just unref the floating value. */
+            g_variant_unref (value);
+        }
+    } else if (value != NULL) {
+        g_variant_unref (value);
+    }
+
+    g_list_foreach (engine_list, (GFunc) g_object_ref, NULL);
+    ibus->engine_list = engine_list;
+
+    if (ibus->engine_list) {
+        BusComponent *component = bus_component_from_engine_desc ((IBusEngineDesc *) ibus->engine_list->data);
+        if (component && !bus_component_is_running (component)) {
+            bus_component_start (component, g_verbose);
+        }
+    }
+
+    bus_ibus_impl_check_global_engine (ibus);
+    bus_ibus_impl_update_engines_hotkey_profile (ibus);
+}
+
+#ifndef OS_CHROMEOS
+static void
+_set_language_relative_preload_engines (BusIBusImpl *ibus)
+{
+    gchar *lang = NULL;
+    gchar *p = NULL;
+    GList *engines = NULL;
+    GList *list;
+    GVariantBuilder builder;
+
+    g_assert (BUS_IS_IBUS_IMPL (ibus));
+
+    /* The setlocale call first checks LC_ALL. If it's not available, checks
+     * LC_CTYPE. If it's also not available, checks LANG. */
+    lang = g_strdup (setlocale (LC_CTYPE, NULL));
+    if (lang == NULL) {
+        return;
+    }
+
+    p = index (lang, '.');
+    if (p) {
+        *p = '\0';
+    }
+
+    engines = bus_registry_get_engines_by_language (ibus->registry, lang);
+    if (engines == NULL) {
+        p = index (lang, '_');
+        if (p) {
+            *p = '\0';
+            engines = bus_registry_get_engines_by_language (ibus->registry, lang);
+        }
+    }
+    g_free (lang);
+
+    /* sort engines by rank */
+    engines = g_list_sort (engines, (GCompareFunc) _engine_desc_cmp);
+
+    g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
+    for (list = engines; list != NULL; list = list->next) {
+        IBusEngineDesc *desc = (IBusEngineDesc *)list->data;
+        /* ignore engines with rank <== 0 */
+        if (ibus_engine_desc_get_rank (desc) > 0)
+            g_variant_builder_add (&builder, "s", ibus_engine_desc_get_name (desc));
+    }
+    _set_preload_engines (ibus, g_variant_builder_end (&builder));
+    g_list_free (engines);
+}
+#endif
+
+static void
 bus_ibus_impl_set_hotkey (BusIBusImpl *ibus,
                           GQuark       hotkey,
                           GVariant    *value)
@@ -392,35 +658,50 @@ static void
 bus_ibus_impl_set_preload_engines (BusIBusImpl *ibus,
                                    GVariant    *value)
 {
-    GList *engine_list = NULL;
+#ifndef OS_CHROMEOS
+    gint preload_engine_mode = _get_config_preload_engine_mode (ibus);
 
-    g_list_foreach (ibus->engine_list, (GFunc) g_object_unref, NULL);
-    g_list_free (ibus->engine_list);
-
-    if (value != NULL && g_variant_classify (value) == G_VARIANT_CLASS_ARRAY) {
-        GVariantIter iter;
-        g_variant_iter_init (&iter, value);
-        const gchar *engine_name = NULL;
-        while (g_variant_iter_loop (&iter, "&s", &engine_name)) {
-            IBusEngineDesc *engine = bus_registry_find_engine_by_name (ibus->registry, engine_name);
-            if (engine == NULL || g_list_find (engine_list, engine) != NULL)
-                continue;
-            engine_list = g_list_append (engine_list, engine);
+    if (preload_engine_mode == IBUS_PRELOAD_ENGINE_MODE_USER) {
+        if (value == NULL) {
+            _set_language_relative_preload_engines (ibus);
+        } else {
+            _set_preload_engines (ibus, value);
         }
     }
+#else
+    _set_preload_engines (ibus, value);
+#endif
+}
 
-    g_list_foreach (engine_list, (GFunc) g_object_ref, NULL);
-    ibus->engine_list = engine_list;
+/**
+ * bus_ibus_impl_set_preload_engine_mode:
+ *
+ * A function to be called when "preload_engine_mode" config is updated.
+ */
+static void
+bus_ibus_impl_set_preload_engine_mode (BusIBusImpl *ibus,
+                                       GVariant    *value)
+{
+#ifndef OS_CHROMEOS
+    gint preload_engine_mode = IBUS_PRELOAD_ENGINE_MODE_USER;
 
-    if (ibus->engine_list) {
-        BusComponent *component = bus_component_from_engine_desc ((IBusEngineDesc *) ibus->engine_list->data);
-        if (component && !bus_component_is_running (component)) {
-            bus_component_start (component, g_verbose);
-        }
+    /* bus_ibus_impl_reload_config() sets value = NULL.
+     * bus_ibus_impl_reload_config() is always called when
+     * RequestName signal is sent so it is good to get the gconf value
+     * again when value == NULL.
+     */
+    if (value != NULL && g_variant_classify (value) == G_VARIANT_CLASS_INT32) {
+        preload_engine_mode = g_variant_get_int32 (value);
+    } else {
+        preload_engine_mode = _get_config_preload_engine_mode (ibus);
     }
 
-    bus_ibus_impl_check_global_engine (ibus);
-    bus_ibus_impl_update_engines_hotkey_profile (ibus);
+    if (preload_engine_mode == IBUS_PRELOAD_ENGINE_MODE_USER) {
+        return;
+    }
+
+    _set_language_relative_preload_engines (ibus);
+#endif
 }
 
 /**
@@ -501,89 +782,47 @@ bus_ibus_impl_set_use_global_engine (BusIBusImpl *ibus,
     }
 }
 
-#ifndef OS_CHROMEOS
-static gint
-_engine_desc_cmp (IBusEngineDesc *desc1,
-                  IBusEngineDesc *desc2)
-{
-    return - ((gint) ibus_engine_desc_get_rank (desc1)) +
-              ((gint) ibus_engine_desc_get_rank (desc2));
-}
-#endif
-
 /**
  * bus_ibus_impl_set_default_preload_engines:
  *
- * If the "preload_engines" config variable is not set yet, set the default value which is determined based on a current locale.
+ * bus_ibus_impl_set_default_preload_engines handles the gconf value
+ * /desktop/ibus/general/preload_engines and preload_engine_mode.
+ * The idea is, if users don't customize the preload_engines with ibus-setup,
+ * users would prefer to load the system default engines again by login.
+ * The gconf value 'preload_engine_mode' is
+ * IBUS_PRELOAD_ENGINE_MODE_USER by default but set
+ * IBUS_PRELOAD_ENGINE_MODE_LANG_RELATIVE for the initial login.
+ * If preload_engine_mode is IBUS_PRELOAD_ENGINE_MODE_LANG_RELATIVE,
+ * ibus-daemon loads the system preload engines by langs.
+ * If preload_engine_mode is IBUS_PRELOAD_ENGINE_MODE_USER,
+ * ibus-daemon do not update the gconf value preload_engines.
+ * On the other hand, if users enable the customized engine checkbutton
+ * on ibus-setup, ibus-setup sets 'preload_engine_mode' as
+ * IBUS_PRELOAD_ENGINE_MODE_USER and users can customize the value
+ * 'preload_engines'.
  */
 static void
 bus_ibus_impl_set_default_preload_engines (BusIBusImpl *ibus)
 {
 #ifndef OS_CHROMEOS
-    g_assert (BUS_IS_IBUS_IMPL (ibus));
-
     static gboolean done = FALSE;
+    gint preload_engine_mode = IBUS_PRELOAD_ENGINE_MODE_USER;
+
+    g_assert (BUS_IS_IBUS_IMPL (ibus));
 
     if (done || ibus->config == NULL) {
         return;
     }
 
-    GVariant *variant = ibus_config_get_value (ibus->config, "general", "preload_engines");
-    if (variant != NULL) {
+    preload_engine_mode = _get_config_preload_engine_mode (ibus);
+
+    if (preload_engine_mode == IBUS_PRELOAD_ENGINE_MODE_USER) {
         done = TRUE;
-        g_variant_unref (variant);
         return;
     }
 
     done = TRUE;
-
-    /* The setlocale call first checks LC_ALL. If it's not available, checks
-     * LC_CTYPE. If it's also not available, checks LANG. */
-    gchar *lang = g_strdup (setlocale (LC_CTYPE, NULL));
-    if (lang == NULL) {
-        return;
-    }
-
-    gchar *p = index (lang, '.');
-    if (p) {
-        *p = '\0';
-    }
-
-    GList *engines = bus_registry_get_engines_by_language (ibus->registry, lang);
-    if (engines == NULL) {
-        p = index (lang, '_');
-        if (p) {
-            *p = '\0';
-            engines = bus_registry_get_engines_by_language (ibus->registry, lang);
-        }
-    }
-    g_free (lang);
-
-    /* sort engines by rank */
-    engines = g_list_sort (engines, (GCompareFunc) _engine_desc_cmp);
-
-    GVariantBuilder builder;
-    g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
-    GList *list;
-    for (list = engines; list != NULL; list = list->next) {
-        IBusEngineDesc *desc = (IBusEngineDesc *) list->data;
-        /* ignore engines with rank <= 0 */
-        if (ibus_engine_desc_get_rank (desc) > 0)
-            g_variant_builder_add (&builder, "s", ibus_engine_desc_get_name (desc));
-    }
-
-    GVariant *value = g_variant_builder_end (&builder);
-    if (value != NULL) {
-        if (g_variant_n_children (value) > 0) {
-            ibus_config_set_value (ibus->config,
-                                   "general", "preload_engines", value);
-        } else {
-            /* We don't update preload_engines with an empty string for safety.
-             * Just unref the floating value. */
-            g_variant_unref (value);
-        }
-    }
-    g_list_free (engines);
+    _set_language_relative_preload_engines (ibus);
 #endif
 }
 
@@ -599,6 +838,7 @@ const static struct {
     { "general/hotkey", "next_engine_in_menu",   bus_ibus_impl_set_next_engine_in_menu },
     { "general/hotkey", "previous_engine",       bus_ibus_impl_set_previous_engine },
     { "general", "preload_engines",              bus_ibus_impl_set_preload_engines },
+    { "general", "preload_engine_mode",          bus_ibus_impl_set_preload_engine_mode },
     { "general", "use_system_keyboard_layout",   bus_ibus_impl_set_use_sys_layout },
     { "general", "use_global_engine",            bus_ibus_impl_set_use_global_engine },
     { "general", "embed_preedit_text",           bus_ibus_impl_set_embed_preedit_text },
