@@ -553,6 +553,7 @@ ibus/_config.py
 ibus/Makefile
 ibus/interface/Makefile
 ui/Makefile
+ui/gjs/Makefile
 ui/gtk/Makefile
 ui/gtk/ibus-ui-gtk
 ui/gtk/gtkpanel.xml.in

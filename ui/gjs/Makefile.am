@@ -2,8 +2,9 @@
 #
 # ibus - The Input Bus
 #
-# Copyright (c) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
-# Copyright (c) 2007-2010 Red Hat, Inc.
+# Copyright (c) 2007-2011 Peng Huang <shawn.p.huang@gmail.com>
+# Copyright (c) 2010-2011 Takao Fujiwara <takao.fujiwara1@gmail.com>
+# Copyright (c) 2007-2011 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -20,11 +21,15 @@
 # Free Software Foundation, Inc., 59 Temple Place, Suite 330,
 # Boston, MA  02111-1307  USA
 
-if ENABLE_PYTHON
-SUBDIRS = \
-	gjs \
-	gtk \
+ui_gjs_DATA = \
+	candidatePanel.js \
+	engineAbout.js \
+	indicator.js \
+	languageBar.js \
+	mainGtk.js \
+	menu.js \
+	panel.js \
 	$(NULL)
-endif
 
--include $(top_srcdir)/git.mk
+ui_gjsdir = $(pkgdatadir)/ui/gjs
+
