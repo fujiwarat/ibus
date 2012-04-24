@@ -495,6 +495,18 @@ void         ibus_input_context_set_engine  (IBusInputContext   *context,
                                              const gchar        *name);
 
 /**
+ * ibus_input_context_set_xkb_engines:
+ * @context: An IBusInputContext.
+ * @list: (transfer container) (element-type IBusEngineDesc):
+ *     A list of the engines.
+ *
+ * Set XKB group layouts from the desktop session.
+ */
+void         ibus_input_context_set_xkb_engines
+                                            (IBusInputContext *context,
+                                             GList            *list);
+
+/**
  * ibus_input_context_set_surrounding_text:
  * @context: An #IBusInputContext.
  * @text: An #IBusText surrounding the current cursor on the application.

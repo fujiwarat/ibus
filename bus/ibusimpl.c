@@ -20,12 +20,17 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
 #include <locale.h>
 #include <strings.h>
+#include <string.h>
 #include "types.h"
 #include "ibusimpl.h"
 #include "dbusimpl.h"
@@ -79,6 +84,11 @@ struct _BusIBusImpl {
     /* engine-specific hotkeys */
     IBusHotkeyProfile *engines_hotkey_profile;
     GHashTable      *hotkey_to_engines_map;
+
+#if USE_BRIDGE_HOTKEY
+    IBusEngineDesc *prev_hotkey_engine;
+    guint           xkb_group_length;
+#endif
 };
 
 struct _BusIBusImplClass {
@@ -98,6 +108,8 @@ enum {
 /*
 static guint            _signals[LAST_SIGNAL] = { 0 };
 */
+
+static gchar           *_bridge_trigger_keys = NULL;
 
 /* functions prototype */
 static void      bus_ibus_impl_destroy           (BusIBusImpl        *ibus);
@@ -282,6 +294,30 @@ _panel_destroy_cb (BusPanelProxy *panel,
     g_object_unref (panel);
 }
 
+static IBusEngineDesc *
+_find_engine_desc_by_name (BusIBusImpl *ibus,
+                           const gchar *engine_name)
+{
+    IBusEngineDesc *desc = NULL;
+    GList *p;
+
+    /* find engine in registered engine list */
+    for (p = ibus->register_engine_list; p != NULL; p = p->next) {
+        desc = (IBusEngineDesc *) p->data;
+        if (g_strcmp0 (ibus_engine_desc_get_name (desc), engine_name) == 0)
+            return desc;
+    }
+
+    /* find engine in preload engine list */
+    for (p = ibus->engine_list; p != NULL; p = p->next) {
+        desc = (IBusEngineDesc *) p->data;
+        if (g_strcmp0 (ibus_engine_desc_get_name (desc), engine_name) == 0)
+            return desc;
+    }
+
+    return NULL;
+}
+
 static void
 bus_ibus_impl_set_hotkey (BusIBusImpl *ibus,
                           GQuark       hotkey,
@@ -306,6 +342,67 @@ bus_ibus_impl_set_hotkey (BusIBusImpl *ibus,
 
 }
 
+#if USE_BRIDGE_HOTKEY
+static gboolean
+use_bridge_hotkey (BusIBusImpl *ibus)
+{
+    GVariant *variant = NULL;
+    gboolean _use_bridge_hotkey = TRUE;
+
+    g_assert (ibus != NULL);
+
+    if (!ibus->config) {
+        return TRUE;
+    }
+
+    variant = ibus_config_get_value (ibus->config,
+                                     "general/hotkey",
+                                     "use_bridge_hotkey");
+
+    if (variant != NULL) {
+        g_variant_get (variant, "b", &_use_bridge_hotkey);
+        g_variant_unref (variant);
+    }
+
+    return _use_bridge_hotkey;
+}
+
+static void
+bus_ibus_impl_set_bridge_trigger_keys (BusIBusImpl *ibus,
+                                       GQuark       hotkey,
+                                       GVariant    *value)
+{
+    g_assert (BUS_IS_IBUS_IMPL (ibus));
+
+    ibus_hotkey_profile_remove_hotkey_by_event (ibus->hotkey_profile, hotkey);
+
+    if (value == NULL) {
+        return;
+    }
+
+    GVariantIter iter;
+    g_variant_iter_init (&iter, value);
+    const gchar *str = NULL;
+
+    g_free (_bridge_trigger_keys);
+    _bridge_trigger_keys = NULL;
+
+    while (g_variant_iter_loop (&iter,"&s", &str)) {
+       if (str != NULL) {
+           gchar *tmp =NULL;
+
+           if (_bridge_trigger_keys) {
+               tmp = g_strdup_printf ("%s,%s", _bridge_trigger_keys, str);
+           } else {
+               tmp = g_strdup (str);
+           }
+           g_free (_bridge_trigger_keys);
+           _bridge_trigger_keys = tmp;
+       }
+    }
+}
+#endif
+
 /**
  * bus_ibus_impl_set_trigger:
  *
@@ -317,7 +414,15 @@ bus_ibus_impl_set_trigger (BusIBusImpl *ibus,
 {
     GQuark hotkey = g_quark_from_static_string ("trigger");
     if (value != NULL) {
+#if USE_BRIDGE_HOTKEY
+        if (use_bridge_hotkey (ibus)) {
+            bus_ibus_impl_set_bridge_trigger_keys (ibus, hotkey, value);
+        } else {
+            bus_ibus_impl_set_hotkey (ibus, hotkey, value);
+        }
+#else
         bus_ibus_impl_set_hotkey (ibus, hotkey, value);
+#endif
     }
 #ifndef OS_CHROMEOS
     else {
@@ -383,6 +488,72 @@ bus_ibus_impl_set_previous_engine (BusIBusImpl *ibus,
     bus_ibus_impl_set_hotkey (ibus, hotkey, value);
 }
 
+#if USE_BRIDGE_HOTKEY
+static gint
+_engine_desc_name_cmp (IBusEngineDesc *desc1,
+                       IBusEngineDesc *desc2)
+{
+    return g_strcmp0 (ibus_engine_desc_get_name (desc1),
+                      ibus_engine_desc_get_name (desc2));
+}
+
+static void
+_set_register_engines (BusIBusImpl *ibus,
+                       GVariant    *value)
+{
+    GList *engine_list = NULL;
+
+    g_assert (BUS_IS_IBUS_IMPL (ibus));
+
+    engine_list = ibus->register_engine_list;
+    if (value != NULL && g_variant_classify (value) == G_VARIANT_CLASS_ARRAY) {
+        GVariantIter iter;
+        g_variant_iter_init (&iter, value);
+        const gchar *engine_name = NULL;
+        while (g_variant_iter_loop (&iter, "&s", &engine_name)) {
+            IBusEngineDesc *engine = bus_registry_find_engine_by_name (ibus->registry, engine_name);
+            if (engine == NULL || g_list_find (engine_list, engine) != NULL)
+                continue;
+            engine_list = g_list_append (engine_list, g_object_ref (engine));
+        }
+    } else if (value != NULL) {
+        g_variant_unref (value);
+    }
+
+    ibus->register_engine_list = engine_list;
+
+    if (engine_list) {
+        BusComponent *component = bus_component_from_engine_desc ((IBusEngineDesc *) engine_list->data);
+        if (component && !bus_component_is_running (component)) {
+            bus_component_start (component, g_verbose);
+        }
+    }
+}
+
+static void
+_set_default_keyboard_layout_engines (BusIBusImpl *ibus)
+{
+    GList *engines = NULL;
+    GList *list;
+    GVariantBuilder builder;
+
+    g_assert (BUS_IS_IBUS_IMPL (ibus));
+
+    engines = bus_registry_get_engines_by_name_prefix (ibus->registry,
+                                                       DEFAULT_BRIDGE_ENGINE_NAME);
+    /* sort engines by rank */
+    engines = g_list_sort (engines, (GCompareFunc) _engine_desc_name_cmp);
+
+    g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
+    for (list = engines; list != NULL; list = list->next) {
+        IBusEngineDesc *desc = (IBusEngineDesc *)list->data;
+        g_variant_builder_add (&builder, "s", ibus_engine_desc_get_name (desc));
+    }
+    _set_register_engines (ibus, g_variant_builder_end (&builder));
+    g_list_free (engines);
+}
+#endif
+
 /**
  * bus_ibus_impl_set_preload_engines:
  *
@@ -421,6 +592,9 @@ bus_ibus_impl_set_preload_engines (BusIBusImpl *ibus,
 
     bus_ibus_impl_check_global_engine (ibus);
     bus_ibus_impl_update_engines_hotkey_profile (ibus);
+#if USE_BRIDGE_HOTKEY
+    _set_default_keyboard_layout_engines (ibus);
+#endif
 }
 
 /**
@@ -952,29 +1126,155 @@ _ibus_get_address (BusIBusImpl           *ibus,
                                            g_variant_new ("(s)", bus_server_get_address ()));
 }
 
-static IBusEngineDesc *
-_find_engine_desc_by_name (BusIBusImpl *ibus,
-                           const gchar *engine_name)
+/**
+ * _foreach_remove_engine_hotkey:
+ *
+ * Remove the engine-specific hot key of the engine, and update ibus->engines_hotkey_profile.
+ */
+gboolean
+_foreach_remove_engine_hotkey (gpointer        key,
+                               gpointer        value,
+                               gpointer        data)
 {
-    IBusEngineDesc *desc = NULL;
-    GList *p;
+    GQuark event = GPOINTER_TO_UINT (value);
+    struct _impl_and_desc {
+        BusIBusImpl    *ibus;
+        IBusEngineDesc *desc;
+    } *id = (struct _impl_and_desc *) data;
+    BusIBusImpl *ibus = id->ibus;
+    IBusEngineDesc *desc = id->desc;
+    GList *engine_list;
 
-    /* find engine in registered engine list */
-    for (p = ibus->register_engine_list; p != NULL; p = p->next) {
-        desc = (IBusEngineDesc *) p->data;
-        if (g_strcmp0 (ibus_engine_desc_get_name (desc), engine_name) == 0)
-            return desc;
+    g_assert (ibus != NULL);
+    g_assert (desc != NULL);
+
+    if (event == 0) {
+        return FALSE;
     }
 
-    /* find engine in preload engine list */
-    for (p = ibus->engine_list; p != NULL; p = p->next) {
-        desc = (IBusEngineDesc *) p->data;
-        if (g_strcmp0 (ibus_engine_desc_get_name (desc), engine_name) == 0)
-            return desc;
+    engine_list = g_hash_table_lookup (ibus->hotkey_to_engines_map,
+                                       GUINT_TO_POINTER (event));
+
+    /* As we will rebuild the engines hotkey map whenever an engine was
+     * added or removed, we don't need to hold a reference of the engine
+     * here. */
+    if (engine_list && g_list_find (engine_list, desc) != NULL) {
+        engine_list = g_list_remove (engine_list, desc);
     }
 
-    return NULL;
+    /* We need to steal the value before adding it back, otherwise it will
+     * be destroyed. */
+    g_hash_table_steal (ibus->hotkey_to_engines_map, GUINT_TO_POINTER (event));
+
+    if (engine_list != NULL) {
+        g_hash_table_insert (ibus->hotkey_to_engines_map,
+                             GUINT_TO_POINTER (event), engine_list);
+    }
+
+    return FALSE;
 }
+
+/**
+ * _add_engine_hotkey_with_hotkeys:
+ *
+ * Check the engine-specific hot key of the engine, and update ibus->engines_hotkey_profile.
+ */
+static void
+_add_engine_hotkey_with_hotkeys (IBusEngineDesc *engine,
+                                 BusIBusImpl    *ibus,
+                                 const gchar    *hotkeys)
+{
+    gchar **hotkey_list;
+    gchar **p;
+    gchar *hotkey;
+    GList *engine_list;
+
+    GQuark event;
+    guint keyval;
+    guint modifiers;
+
+    g_assert (engine != NULL);
+    g_assert (hotkeys && *hotkeys);
+
+    hotkey_list = g_strsplit_set (hotkeys, ";,", 0);
+
+    for (p = hotkey_list; p && *p; ++p) {
+        hotkey = g_strstrip (*p);
+        if (!*hotkey || !ibus_key_event_from_string (hotkey, &keyval, &modifiers)) {
+            continue;
+        }
+
+        /* If the hotkey already exists, we won't need to add it again. */
+        event = ibus_hotkey_profile_lookup_hotkey (ibus->engines_hotkey_profile,
+                                                   keyval, modifiers);
+        if (event == 0) {
+            event = g_quark_from_string (hotkey);
+            ibus_hotkey_profile_add_hotkey (ibus->engines_hotkey_profile,
+                                            keyval, modifiers, event);
+        }
+
+        engine_list = g_hash_table_lookup (ibus->hotkey_to_engines_map,
+                                           GUINT_TO_POINTER (event));
+
+        /* As we will rebuild the engines hotkey map whenever an engine was
+         * added or removed, we don't need to hold a reference of the engine
+         * here. */
+        engine_list = g_list_append (engine_list, engine);
+
+        /* We need to steal the value before adding it back, otherwise it will
+         * be destroyed. */
+        g_hash_table_steal (ibus->hotkey_to_engines_map, GUINT_TO_POINTER (event));
+
+        g_hash_table_insert (ibus->hotkey_to_engines_map,
+                             GUINT_TO_POINTER (event), engine_list);
+    }
+
+    g_strfreev (hotkey_list);
+}
+
+#if USE_BRIDGE_HOTKEY
+const gchar *
+_get_engine_desc_hotkeys_with_system (IBusEngineDesc *desc)
+{
+    const gchar *hotkeys = NULL;
+
+    /* If the user customized the trigger key, the trigger key is used for
+     * any IBus engines. */
+    if (g_strcmp0 (_bridge_trigger_keys, "Control+space") != 0) {
+        hotkeys = (const gchar *) _bridge_trigger_keys;
+    } else if (desc) {
+        hotkeys = ibus_engine_desc_get_hotkeys (desc);
+
+        /* If engine hotkeys are not defined in the compose xml file,
+         * IBus trigger keys are used. */
+        if (!hotkeys || !*hotkeys) {
+            hotkeys = (const gchar *) _bridge_trigger_keys;
+        }
+    }
+
+    return hotkeys;
+}
+
+void
+_update_hotkeys_by_prev_engine_desc (BusIBusImpl    *ibus,
+                                     IBusEngineDesc *next_desc,
+                                     IBusEngineDesc *prev_desc)
+{
+    struct _impl_and_desc {
+        BusIBusImpl    *ibus;
+        IBusEngineDesc *desc;
+    } id = {ibus, next_desc};
+    const gchar *hotkeys = NULL;
+
+    hotkeys = _get_engine_desc_hotkeys_with_system (prev_desc);
+    if (hotkeys && *hotkeys) {
+        ibus_hotkey_profile_foreach_hotkey (ibus->engines_hotkey_profile,
+                                            _foreach_remove_engine_hotkey,
+                                            &id);
+        _add_engine_hotkey_with_hotkeys (next_desc, ibus, hotkeys);
+    }
+}
+#endif
 
 /**
  * _context_request_engine_cb:
@@ -986,7 +1286,53 @@ _context_request_engine_cb (BusInputContext *context,
                             const gchar     *engine_name,
                             BusIBusImpl     *ibus)
 {
-    return bus_ibus_impl_get_engine_desc (ibus, engine_name);
+    IBusEngineDesc *desc = bus_ibus_impl_get_engine_desc (ibus, engine_name);
+
+#if USE_BRIDGE_HOTKEY
+    IBusEngineDesc *current_desc = NULL;
+
+    if (!use_bridge_hotkey (ibus)) {
+        return desc;
+    }
+
+    if (context) {
+        BusEngineProxy *engine = bus_input_context_get_engine (context);
+        if (engine != NULL) {
+            current_desc = bus_engine_proxy_get_desc (engine);
+        }
+    }
+
+    if (((current_desc == NULL && desc != NULL) ||
+         (current_desc != NULL && desc != NULL &&
+          g_strcmp0 (ibus_engine_desc_get_name (current_desc),
+                     ibus_engine_desc_get_name (desc)) != 0)) &&
+        g_ascii_strncasecmp (ibus_engine_desc_get_name (desc),
+                             DEFAULT_BRIDGE_ENGINE_NAME,
+                             strlen (DEFAULT_BRIDGE_ENGINE_NAME)) == 0) {
+        _update_hotkeys_by_prev_engine_desc (ibus, desc, current_desc);
+    }
+
+    if (current_desc && desc &&
+        g_strcmp0 (ibus_engine_desc_get_name (current_desc),
+                   ibus_engine_desc_get_name (desc)) != 0) {
+        if (context) {
+            bus_input_context_set_prev_hotkey_engine (context, current_desc);
+        } else {
+            ibus->prev_hotkey_engine = current_desc;
+        }
+
+        /* If the previous engine is not included in engine_list and
+         * the current engine is the defualt bridge engine,
+         * the current engine is also not included in engine_list.
+         * So the engine is added here. */
+        if (g_ascii_strncasecmp (ibus_engine_desc_get_name (current_desc),
+                                 DEFAULT_BRIDGE_ENGINE_NAME,
+                                 strlen (DEFAULT_BRIDGE_ENGINE_NAME)) == 0) {
+            _update_hotkeys_by_prev_engine_desc (ibus, current_desc, desc);
+        }
+    }
+#endif
+    return desc;
 }
 
 /**
@@ -1025,8 +1371,13 @@ bus_ibus_impl_get_engine_desc (BusIBusImpl *ibus,
         if (!desc) {
             if (ibus->register_engine_list) {
                 desc = (IBusEngineDesc *) ibus->register_engine_list->data;
+#if USE_BRIDGE_HOTKEY
+                if (engine_name == NULL) {
+                    desc = NULL;
+                }
+#endif
             }
-            else if (ibus->engine_list) {
+            if (!desc && ibus->engine_list) {
                 desc = (IBusEngineDesc *) ibus->engine_list->data;
             }
         }
@@ -1071,9 +1422,20 @@ bus_ibus_impl_context_request_rotate_engine_in_menu (BusIBusImpl     *ibus,
     desc = bus_engine_proxy_get_desc (engine);
 
     p = g_list_find (ibus->register_engine_list, desc);
+#if USE_BRIDGE_HOTKEY
+    if (!use_bridge_hotkey (ibus)) {
+        p = NULL;
+    }
+#endif
     if (p != NULL) {
         if (is_next) {
             p = p->next;
+#if USE_BRIDGE_HOTKEY
+            if (p && g_list_length (ibus->register_engine_list) -
+                    g_list_length (p) >= ibus->xkb_group_length) {
+                p = NULL;
+            }
+#endif
         } else {
             p = p->prev;
         }
@@ -1103,11 +1465,25 @@ bus_ibus_impl_context_request_rotate_engine_in_menu (BusIBusImpl     *ibus,
     if (p == NULL && g_list_find (ibus->engine_list, desc) != NULL) {
         if (is_next) {
             p = ibus->register_engine_list;
+#if USE_BRIDGE_HOTKEY
+            if (!use_bridge_hotkey (ibus)) {
+                p = NULL;
+            }
+#endif
             if (p == NULL) {
                 p = ibus->engine_list;
             }
         } else {
             p = g_list_last (ibus->register_engine_list);
+#if USE_BRIDGE_HOTKEY
+            if (!use_bridge_hotkey (ibus)) {
+                p = NULL;
+            }
+            else if (ibus->xkb_group_length > 0) {
+                p = g_list_nth (ibus->register_engine_list,
+                                ibus->xkb_group_length - 1);
+            }
+#endif
             if (p == NULL) {
                 p = g_list_last (ibus->engine_list);
             }
@@ -1118,14 +1494,31 @@ bus_ibus_impl_context_request_rotate_engine_in_menu (BusIBusImpl     *ibus,
         next_desc = (IBusEngineDesc*) p->data;
     }
     else {
+#if USE_BRIDGE_HOTKEY
+        if (use_bridge_hotkey (ibus) && ibus->register_engine_list) {
+            next_desc = (IBusEngineDesc *) ibus->register_engine_list->data;
+        }
+#else
         if (ibus->register_engine_list) {
             next_desc = (IBusEngineDesc *) ibus->register_engine_list->data;
         }
+#endif
         else if (ibus->engine_list) {
             next_desc = (IBusEngineDesc *) ibus->engine_list->data;
         }
     }
 
+#if USE_BRIDGE_HOTKEY
+    if (use_bridge_hotkey (ibus) && desc != next_desc) {
+        bus_input_context_set_prev_hotkey_engine (context, desc);
+        if (desc != NULL &&
+            g_ascii_strncasecmp (ibus_engine_desc_get_name (desc),
+                                 DEFAULT_BRIDGE_ENGINE_NAME,
+                                 strlen (DEFAULT_BRIDGE_ENGINE_NAME)) == 0) {
+            _update_hotkeys_by_prev_engine_desc (ibus, desc, next_desc);
+        }
+    }
+#endif
     bus_ibus_impl_set_context_engine_from_desc (ibus, context, next_desc);
 }
 
@@ -1147,7 +1540,9 @@ bus_ibus_impl_context_request_previous_engine (BusIBusImpl     *ibus,
         if (!ibus->global_previous_engine_name) {
             ibus->global_previous_engine_name = bus_ibus_impl_load_global_previous_engine_name_from_config (ibus);
         }
+#if 0
         engine_name = ibus->global_previous_engine_name;
+#endif
         if (engine_name != NULL) {
             /* If the previous engine is removed from the engine list or the
                current engine and the previous engine are the same one, force
@@ -1208,6 +1603,9 @@ bus_ibus_impl_set_focused_context (BusIBusImpl     *ibus,
 
     BusEngineProxy *engine = NULL;
     gboolean is_enabled = FALSE;
+#if USE_BRIDGE_HOTKEY
+    IBusEngineDesc *desc = NULL;
+#endif
 
     if (ibus->focused_context) {
         if (ibus->use_global_engine) {
@@ -1215,6 +1613,9 @@ bus_ibus_impl_set_focused_context (BusIBusImpl     *ibus,
             engine = bus_input_context_get_engine (ibus->focused_context);
             if (engine) {
                 is_enabled = bus_input_context_is_enabled (ibus->focused_context);
+#if USE_BRIDGE_HOTKEY
+                desc = bus_input_context_get_prev_hotkey_engine (ibus->focused_context);
+#endif
                 g_object_ref (engine);
                 bus_input_context_set_engine (ibus->focused_context, NULL);
             }
@@ -1239,6 +1640,9 @@ bus_ibus_impl_set_focused_context (BusIBusImpl     *ibus,
             if (is_enabled) {
                 bus_input_context_enable (context);
             }
+#if USE_BRIDGE_HOTKEY
+            bus_input_context_set_prev_hotkey_engine (ibus->focused_context, desc);
+#endif
             g_object_unref (engine);
         }
 
@@ -1468,6 +1872,25 @@ _context_disabled_cb (BusInputContext    *context,
 }
 
 /**
+ * _context_set_xkb_engines_cb:
+ *
+ * A callback function to be called when the "set-xkb-engines" signal is sent to the context.
+ */
+static void
+_context_set_xkb_engines_cb (BusInputContext    *context,
+                             GList              *list,
+                             BusIBusImpl        *ibus)
+{
+    if (list == NULL) {
+        return;
+    }
+
+#if USE_BRIDGE_HOTKEY
+    ibus->xkb_group_length = g_list_length (list);
+#endif
+}
+
+/**
  * bus_ibus_impl_create_input_context:
  * @client: A name of a client. e.g. "gtk-im"
  * @returns: A BusInputContext object.
@@ -1495,6 +1918,7 @@ bus_ibus_impl_create_input_context (BusIBusImpl   *ibus,
         { "destroy",        G_CALLBACK (_context_destroy_cb) },
         { "enabled",        G_CALLBACK (_context_enabled_cb) },
         { "disabled",       G_CALLBACK (_context_disabled_cb) },
+        { "set-xkb-engines", G_CALLBACK (_context_set_xkb_engines_cb) },
     };
 
     gint i;
@@ -2072,6 +2496,9 @@ bus_ibus_impl_filter_keyboard_shortcuts (BusIBusImpl     *ibus,
 
     GQuark event;
     GList *engine_list;
+#if USE_BRIDGE_HOTKEY
+    IBusEngineDesc *prev_hotkey_engine = NULL;
+#endif
 
     if (trigger == 0) {
         trigger = g_quark_from_static_string ("trigger");
@@ -2137,6 +2564,12 @@ bus_ibus_impl_filter_keyboard_shortcuts (BusIBusImpl     *ibus,
         return FALSE;
     }
 
+#if USE_BRIDGE_HOTKEY
+    if (!use_bridge_hotkey (ibus)) {
+        return FALSE;
+    }
+#endif
+
     /* Then try engines hotkeys. */
     event = ibus_hotkey_profile_filter_key_event (ibus->engines_hotkey_profile,
                                                   keyval,
@@ -2158,6 +2591,24 @@ bus_ibus_impl_filter_keyboard_shortcuts (BusIBusImpl     *ibus,
 
         g_assert (new_engine_desc);
 
+#if USE_BRIDGE_HOTKEY
+        if (context) {
+            prev_hotkey_engine = bus_input_context_get_prev_hotkey_engine (context);
+            if (prev_hotkey_engine == NULL && ibus->prev_hotkey_engine) {
+                prev_hotkey_engine = ibus->prev_hotkey_engine;
+                bus_input_context_set_prev_hotkey_engine (context,
+                                                          prev_hotkey_engine);
+            }
+        }
+
+        /* If the previous engine is not included in engine_list,
+         * this enables a new engine instead of toggling the engines
+         * so should not enable the previous engine. */
+        if (prev_hotkey_engine &&
+            g_list_find (engine_list, prev_hotkey_engine) != NULL) {
+            new_engine_desc = prev_hotkey_engine;
+        }
+#else
         /* Find out what engine we should switch to. If the current engine has
          * the same hotkey, then we should switch to the next engine with the
          * same hotkey in the list. Otherwise, we just switch to the first
@@ -2169,8 +2620,43 @@ bus_ibus_impl_filter_keyboard_shortcuts (BusIBusImpl     *ibus,
                 break;
             }
         }
+#endif
+
+#if USE_BRIDGE_HOTKEY
+        if (context == NULL) {
+            return FALSE;
+        }
+
+        /* This means RequestEngine signal might be done but SetEngine signal
+         * has not been done yet by ibus status icon. */
+        if (current_engine_desc == NULL &&
+            !bus_input_context_inited_engine (context)) {
+            return FALSE;
+        }
 
         if (current_engine_desc != new_engine_desc) {
+            if (current_engine_desc) {
+                if (context) {
+                    bus_input_context_set_prev_hotkey_engine (context,
+                                                              current_engine_desc);
+                }
+            }
+
+            /* If the current engine is the defualt bridge engine,
+             * the current engine is not included in engine_list.
+             * E.g. prev is Ctrl+space and Zenaku and current is Ctrl+space.
+             * So the engine is added here. */
+            if (current_engine_desc != NULL &&
+                g_ascii_strncasecmp (ibus_engine_desc_get_name (current_engine_desc),
+                                     DEFAULT_BRIDGE_ENGINE_NAME,
+                                     strlen (DEFAULT_BRIDGE_ENGINE_NAME)) == 0) {
+                _update_hotkeys_by_prev_engine_desc (ibus,
+                                                     current_engine_desc,
+                                                     new_engine_desc);
+            }
+#else
+        if (current_engine_desc != new_engine_desc) {
+#endif
             bus_ibus_impl_set_context_engine_from_desc (ibus, context, new_engine_desc);
         }
 
@@ -2274,59 +2760,49 @@ static void
 _add_engine_hotkey (IBusEngineDesc *engine, BusIBusImpl *ibus)
 {
     const gchar *hotkeys;
-    gchar **hotkey_list;
-    gchar **p;
-    gchar *hotkey;
-    GList *engine_list;
-
-    GQuark event;
-    guint keyval;
-    guint modifiers;
 
     if (!engine) {
         return;
     }
 
+#if USE_BRIDGE_HOTKEY
+    if (!use_bridge_hotkey (ibus)) {
+        return;
+    }
+
+    /* Do not register hotkeys for the default keymap engines
+     * but register hotkeys for only input-method engines
+     * in 'RegisterComponent' dbus method.
+     * The hotkeys for an activated keymap engine will be registered
+     * in 'SetEngine' dbus method. */
+    if (g_ascii_strncasecmp (ibus_engine_desc_get_name (engine),
+                             DEFAULT_BRIDGE_ENGINE_NAME,
+                             strlen (DEFAULT_BRIDGE_ENGINE_NAME)) == 0) {
+        return;
+    }
+
+    /* If the user customized the trigger key, the trigger key is used for
+     * any IBus engines. */
+    if (g_strcmp0 (_bridge_trigger_keys, "Control+space") != 0) {
+        hotkeys = (const gchar *) _bridge_trigger_keys;
+    } else {
+        hotkeys = ibus_engine_desc_get_hotkeys (engine);
+
+        /* If engine hotkeys are not defined in the compose xml file,
+         * IBus trigger keys are used. */
+        if (!hotkeys || !*hotkeys) {
+            hotkeys = (const gchar *) _bridge_trigger_keys;
+        }
+    }
+#else
     hotkeys = ibus_engine_desc_get_hotkeys (engine);
+#endif
 
     if (!hotkeys || !*hotkeys) {
         return;
     }
 
-    hotkey_list = g_strsplit_set (hotkeys, ";,", 0);
-
-    for (p = hotkey_list; p && *p; ++p) {
-        hotkey = g_strstrip (*p);
-        if (!*hotkey || !ibus_key_event_from_string (hotkey, &keyval, &modifiers)) {
-            continue;
-        }
-
-        /* If the hotkey already exists, we won't need to add it again. */
-        event = ibus_hotkey_profile_lookup_hotkey (ibus->engines_hotkey_profile,
-                                                   keyval, modifiers);
-        if (event == 0) {
-            event = g_quark_from_string (hotkey);
-            ibus_hotkey_profile_add_hotkey (ibus->engines_hotkey_profile,
-                                            keyval, modifiers, event);
-        }
-
-        engine_list = g_hash_table_lookup (ibus->hotkey_to_engines_map,
-                                           GUINT_TO_POINTER (event));
-
-        /* As we will rebuild the engines hotkey map whenever an engine was
-         * added or removed, we don't need to hold a reference of the engine
-         * here. */
-        engine_list = g_list_append (engine_list, engine);
-
-        /* We need to steal the value before adding it back, otherwise it will
-         * be destroyed. */
-        g_hash_table_steal (ibus->hotkey_to_engines_map, GUINT_TO_POINTER (event));
-
-        g_hash_table_insert (ibus->hotkey_to_engines_map,
-                             GUINT_TO_POINTER (event), engine_list);
-    }
-
-    g_strfreev (hotkey_list);
+    _add_engine_hotkey_with_hotkeys (engine, ibus, hotkeys);
 }
 
 /**

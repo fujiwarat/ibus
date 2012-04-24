@@ -25,6 +25,8 @@ __all__ = (
     "get_copyright",
     "get_license",
     "get_ICON_KEYBOARD",
+    "use_bridge_hotkey",
+    "DEFAULT_BRIDGE_ENGINE_NAME",
     "ISOCODES_PREFIX",
     "_"
 )
@@ -55,4 +57,8 @@ def get_ICON_KEYBOARD():
         return fallback_icon
     return icon
 
+def use_bridge_hotkey():
+    return True if @USE_BRIDGE_HOTKEY@ == 1 else False
+
+DEFAULT_BRIDGE_ENGINE_NAME='@DEFAULT_BRIDGE_ENGINE_NAME@'
 ISOCODES_PREFIX='@ISOCODES_PREFIX@'

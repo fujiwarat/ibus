@@ -38,14 +38,16 @@ INTROSPECTION_GIRS =
 CLEANFILES =
 
 # C preprocessor flags
-AM_CPPFLAGS =                                   \
-    -DG_LOG_DOMAIN=\"IBUS\"                     \
-    @GLIB2_CFLAGS@                              \
-    @GOBJECT2_CFLAGS@                           \
-    @GIO2_CFLAGS@                               \
-    -DIBUS_DATA_DIR=\"$(pkgdatadir)\"           \
-    -DIBUS_COMPILATION                          \
-    -DISOCODES_PREFIX=\"$(ISOCODES_PREFIX)\"    \
+AM_CPPFLAGS =                                                           \
+    -DG_LOG_DOMAIN=\"IBUS\"                                             \
+    @GLIB2_CFLAGS@                                                      \
+    @GOBJECT2_CFLAGS@                                                   \
+    @GIO2_CFLAGS@                                                       \
+    -DIBUS_DATA_DIR=\"$(pkgdatadir)\"                                   \
+    -DIBUS_COMPILATION                                                  \
+    -DISOCODES_PREFIX=\"$(ISOCODES_PREFIX)\"                            \
+    -DUSE_BRIDGE_HOTKEY=$(USE_BRIDGE_HOTKEY)                            \
+    -DDEFAULT_BRIDGE_ENGINE_NAME=\"$(DEFAULT_BRIDGE_ENGINE_NAME)\"      \
     $(NULL)
 
 # ibus library

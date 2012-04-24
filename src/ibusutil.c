@@ -145,3 +145,15 @@ ibus_get_language_name(const gchar *_locale) {
     }
     return retval;
 }
+
+gboolean
+ibus_use_bridge_hotkey (void)
+{
+    return (USE_BRIDGE_HOTKEY == 1) ? TRUE : FALSE;
+}
+
+const gchar *
+ibus_get_default_bridge_engine_name (void)
+{
+    return DEFAULT_BRIDGE_ENGINE_NAME;
+}

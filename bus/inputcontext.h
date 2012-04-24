@@ -213,5 +213,27 @@ void                 bus_input_context_set_capabilities (BusInputContext    *con
  */
 const gchar         *bus_input_context_get_client       (BusInputContext    *context);
 
+/**
+ * bus_input_context_inited_engine:
+ * @returns: context->inited_engine.
+ */
+gboolean             bus_input_context_inited_engine
+                                                        (BusInputContext *context);
+
+/**
+ * bus_input_context_get_prev_hotkey_engine:
+ * @returns: context->prev_hotkey_engine.
+ */
+IBusEngineDesc      *bus_input_context_get_prev_hotkey_engine
+                                                        (BusInputContext *context);
+
+/**
+ * bus_input_context_set_prev_hotkey_engine:
+ * @desc: Assign the desc to context->prev_hotkey_engine.
+ */
+void                 bus_input_context_set_prev_hotkey_engine
+                                                        (BusInputContext *context,
+                                                         IBusEngineDesc  *desc);
+
 G_END_DECLS
 #endif

@@ -29,15 +29,17 @@ INCLUDES =                \
 	-I$(top_builddir)/src \
 	$(NULL)
 
-AM_CFLAGS =                        \
-	@GLIB2_CFLAGS@                 \
-	@GIO2_CFLAGS@                  \
-	@GTHREAD2_CFLAGS@              \
-	-DG_LOG_DOMAIN=\"IBUS\"        \
-	-DPKGDATADIR=\"$(pkgdatadir)\" \
-	-DLIBEXECDIR=\"$(libexecdir)\" \
-	-DBINDIR=\"@bindir@\"          \
-	$(INCLUDES)                    \
+AM_CFLAGS =                                                            \
+	@GLIB2_CFLAGS@                                                 \
+	@GIO2_CFLAGS@                                                  \
+	@GTHREAD2_CFLAGS@                                              \
+	-DG_LOG_DOMAIN=\"IBUS\"                                        \
+	-DPKGDATADIR=\"$(pkgdatadir)\"                                 \
+	-DLIBEXECDIR=\"$(libexecdir)\"                                 \
+	-DBINDIR=\"@bindir@\"                                          \
+	-DUSE_BRIDGE_HOTKEY=$(USE_BRIDGE_HOTKEY)                       \
+	-DDEFAULT_BRIDGE_ENGINE_NAME=\"$(DEFAULT_BRIDGE_ENGINE_NAME)\" \
+	$(INCLUDES)                                                    \
 	$(NULL)
 AM_LDADD =                  \
 	@GOBJECT2_LIBS@         \

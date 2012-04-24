@@ -76,8 +76,11 @@ class IInputContext(dbus.service.Object):
     @method(out_signature="v")
     def GetEngine(self): pass
 
-    @method(in_signature="s")
-    def SetEngine(self, engine_name): pass
+    @async_method(in_signature="s")
+    def SetEngine(self, engine_name, reply_cb, error_cb): pass
+
+    @async_method(in_signature="av")
+    def SetXKBEngines(self, engines, reply_cb, error_cb): pass
 
     @method()
     def Destroy(self): pass

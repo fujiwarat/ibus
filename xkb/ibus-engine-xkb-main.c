@@ -178,6 +178,9 @@ print_component ()
     const gchar *desc;
     gchar *output;
     GString *str;
+#if USE_BRIDGE_HOTKEY
+    int i;
+#endif
 
 #ifdef XKBLAYOUTCONFIG_FILE
     layout_config = ibus_xkb_layout_config_new (XKBLAYOUTCONFIG_FILE);
@@ -190,6 +193,19 @@ print_component ()
     layout_desc = (GHashTable *) ibus_xkb_config_registry_get_layout_desc (config_registry);
     variant_desc = (GHashTable *) ibus_xkb_config_registry_get_variant_desc (config_registry);
     component = ibus_xkb_component_new ();
+#if USE_BRIDGE_HOTKEY
+    for (i = 0; i < 4; i++) {
+        gchar *name = g_strdup_printf ("%s#%d", DEFAULT_BRIDGE_ENGINE_NAME, i);
+        engine = ibus_xkb_engine_desc_new ("eng",
+                                           "us",
+                                           _("Default Layout"),
+                                           NULL,
+                                           NULL,
+                                           name);
+        g_free (name);
+        ibus_component_add_engine (component, engine);
+    }
+#endif
     for (keys = g_hash_table_get_keys (layout_list); keys; keys = keys->next) {
         if (keys->data == NULL) {
             continue;

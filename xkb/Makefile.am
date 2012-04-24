@@ -28,6 +28,8 @@ INCLUDES = \
         -I$(top_srcdir)/src \
 	-DIBUS_LOCALEDIR=\"$(datadir)/locale\" \
 	-DLIBEXECDIR=\""$(libexecdir)"\" \
+	-DUSE_BRIDGE_HOTKEY=$(USE_BRIDGE_HOTKEY) \
+	-DDEFAULT_BRIDGE_ENGINE_NAME=\"$(DEFAULT_BRIDGE_ENGINE_NAME)\" \
         $(NULL)
 
 noinst_PROGRAMS = $(TESTS)

@@ -19,6 +19,11 @@
  * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include "registry.h"
 #include <glib/gstdio.h>
 #include <gio/gio.h>
@@ -101,6 +106,9 @@ bus_registry_init (BusRegistry *registry)
     registry->observed_paths = NULL;
     registry->components = NULL;
     registry->engine_table = g_hash_table_new (g_str_hash, g_str_equal);
+#if USE_BRIDGE_HOTKEY
+    gboolean has_default_engine = FALSE;
+#endif
 
 #ifdef G_THREADS_ENABLED
     /* If glib supports thread, we'll create a thread to monitor changes in IME
@@ -145,12 +153,40 @@ bus_registry_init (BusRegistry *registry)
         GList *p1;
         for (p1 = engines; p1 != NULL; p1 = p1->next) {
             IBusEngineDesc *desc = (IBusEngineDesc *) p1->data;
+#if USE_BRIDGE_HOTKEY
+            if (g_ascii_strncasecmp (ibus_engine_desc_get_name (desc),
+                                     DEFAULT_BRIDGE_ENGINE_NAME,
+                                     strlen (DEFAULT_BRIDGE_ENGINE_NAME)) == 0) {
+                has_default_engine = TRUE;
+            }
+#endif
             g_hash_table_insert (registry->engine_table,
                                  (gpointer) ibus_engine_desc_get_name (desc),
                                  desc);
         }
         g_list_free (engines);
     }
+
+#if USE_BRIDGE_HOTKEY
+    if (has_default_engine == FALSE) {
+        bus_registry_remove_all (registry);
+        bus_registry_load (registry);
+        bus_registry_save_cache (registry);
+
+        for (p = registry->components; p != NULL; p = p->next) {
+            BusComponent *comp = (BusComponent *) p->data;
+            GList *engines = bus_component_get_engines (comp);
+            GList *p1;
+            for (p1 = engines; p1 != NULL; p1 = p1->next) {
+                IBusEngineDesc *desc = (IBusEngineDesc *) p1->data;
+                g_hash_table_insert (registry->engine_table,
+                                     (gpointer) ibus_engine_desc_get_name (desc),
+                                     desc);
+            }
+            g_list_free (engines);
+        }
+    }
+#endif
 }
 
 static void
@@ -508,6 +544,31 @@ bus_registry_get_engines_by_language (BusRegistry *registry,
     for (p2 = p1; p2 != NULL; p2 = p2->next) {
         IBusEngineDesc *desc = (IBusEngineDesc *) p2->data;
         if (strncmp (ibus_engine_desc_get_language (desc), language, n) == 0) {
+            engines = g_list_append (engines, desc);
+        }
+    }
+
+    g_list_free (p1);
+    return engines;
+}
+
+GList *
+bus_registry_get_engines_by_name_prefix (BusRegistry *registry,
+                                         const gchar *name_prefix)
+{
+    GList *p1, *p2;
+    GList *engines = NULL;
+
+    g_assert (BUS_IS_REGISTRY (registry));
+    g_assert (name_prefix);
+
+    p1 = bus_registry_get_engines (registry);
+
+    for (p2 = p1; p2 != NULL; p2 = p2->next) {
+        IBusEngineDesc *desc = (IBusEngineDesc *) p2->data;
+        if (g_ascii_strncasecmp (ibus_engine_desc_get_name (desc),
+                                 name_prefix,
+                                 strlen (name_prefix)) == 0) {
             engines = g_list_append (engines, desc);
         }
     }

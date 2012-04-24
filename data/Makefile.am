@@ -30,7 +30,8 @@ SUBDIRS += dconf
 endif
 
 schemasdir = $(GCONF_SCHEMA_FILE_DIR)
-schemas_in_files = ibus.schemas.in
+schemas_in_in_files = ibus.schemas.in.in
+schemas_in_files = $(schemas_in_in_files:.schemas.in.in=.schemas.in)
 schemas_DATA = $(schemas_in_files:.schemas.in=.schemas)
 @INTLTOOL_SCHEMAS_RULE@
 
@@ -45,11 +46,12 @@ if GCONF_SCHEMAS_INSTALL
 endif
 
 EXTRA_DIST = \
-	$(schemas_in_files) \
+	$(schemas_in_in_files) \
 	$(NULL)
 
 DISTCLEANFILES = \
 	$(schemas_DATA) \
+	$(schemas_in_files) \
 	$(NULL)
 
 -include $(top_srcdir)/git.mk

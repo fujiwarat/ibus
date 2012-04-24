@@ -25,6 +25,7 @@
 #endif
 
 #include <glib.h>
+#include <string.h>
 
 #include "xkbxml.h"
 #include "ibus.h"
@@ -275,6 +276,7 @@ ibus_xkb_engine_desc_new (const gchar *lang,
     gchar *desc = NULL;
     gchar *engine_layout = NULL;
     const gchar *name_prefix = "xkb:layout:";
+    const gchar *icon = "ibus-engine";
 
     g_return_val_if_fail (lang != NULL && layout != NULL, NULL);
 
@@ -304,6 +306,12 @@ ibus_xkb_engine_desc_new (const gchar *lang,
         desc = g_strdup_printf ("XKB %s keyboard layout", layout);
         engine_layout = g_strdup (layout);
     }
+#if USE_BRIDGE_HOTKEY
+    if (g_ascii_strncasecmp (name, DEFAULT_BRIDGE_ENGINE_NAME,
+                             strlen (DEFAULT_BRIDGE_ENGINE_NAME)) == 0) {
+        icon = "input-keyboard-symbolic";
+    }
+#endif
 
     engine = ibus_engine_desc_new (name,
                                    longname,
@@ -311,7 +319,7 @@ ibus_xkb_engine_desc_new (const gchar *lang,
                                    lang,
                                    "LGPL2.1",
                                    "Takao Fujiwara <takao.fujiwara1@gmail.com>",
-                                   "ibus-engine",
+                                   icon,
                                    engine_layout);
 
     g_free (name);

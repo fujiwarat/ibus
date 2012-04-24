@@ -73,6 +73,16 @@ GList           *bus_registry_get_engines_by_language
                                                  const gchar    *language);
 
 /**
+ * bus_registry_get_engines_by_name_prefix:
+ * @name_prefix: a prefix in the name of IBusEngineDesc. 
+ * @returns: a list of IBusEngineDesc objects which has the name prefix.
+ *           The caller has to call g_list_free for the returned list.
+ */
+GList           *bus_registry_get_engines_by_name_prefix
+                                                (BusRegistry    *registry,
+                                                 const gchar    *name_prefix);
+
+/**
  * bus_registry_stop_all_components:
  *
  * Terminate all component processes.

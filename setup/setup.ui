@@ -100,6 +100,7 @@
                                 <property name="n_columns">2</property>
                                 <property name="column_spacing">12</property>
                                 <property name="row_spacing">6</property>
+                                <property name="no_show_all">True</property>
                                 <child>
                                   <object class="GtkLabel" id="label8">
                                     <property name="visible">True</property>
@@ -232,7 +233,7 @@
                                   </packing>
                                 </child>
                                 <child>
-                                  <object class="GtkLabel" id="label7">
+                                  <object class="GtkLabel" id="label_trigger_hotkey">
                                     <property name="visible">True</property>
                                     <property name="tooltip_text" translatable="yes">The shortcut keys for turning input method on or off</property>
                                     <property name="xalign">0</property>
@@ -244,7 +245,7 @@
                                   </packing>
                                 </child>
                                 <child>
-                                  <object class="GtkLabel" id="label18">
+                                  <object class="GtkLabel" id="label_enable">
                                     <property name="visible">True</property>
                                     <property name="xalign">0</property>
                                     <property name="label" translatable="yes">Enable:</property>
@@ -257,7 +258,7 @@
                                   </packing>
                                 </child>
                                 <child>
-                                  <object class="GtkHBox" id="hbox2">
+                                  <object class="GtkHBox" id="hbox_enable">
                                     <property name="visible">True</property>
                                     <property name="spacing">6</property>
                                     <child>
@@ -292,7 +293,7 @@
                                   </packing>
                                 </child>
                                 <child>
-                                  <object class="GtkLabel" id="label19">
+                                  <object class="GtkLabel" id="label_disable">
                                     <property name="visible">True</property>
                                     <property name="xalign">0</property>
                                     <property name="label" translatable="yes">Disable:</property>
@@ -305,7 +306,7 @@
                                   </packing>
                                 </child>
                                 <child>
-                                  <object class="GtkHBox" id="hbox3">
+                                  <object class="GtkHBox" id="hbox_disable">
                                     <property name="visible">True</property>
                                     <property name="spacing">6</property>
                                     <child>
@@ -976,6 +977,59 @@ You may use up/down buttons to change it.&lt;/i&gt;&lt;/small&gt;</property>
                         <property name="expand">False</property>
                         <property name="fill">False</property>
                         <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkFrame" id="frame6">
+                        <property name="visible">True</property>
+                        <property name="label_xalign">0</property>
+                        <property name="shadow_type">none</property>
+                        <child>
+                          <object class="GtkAlignment" id="alignment14">
+                            <property name="visible">True</property>
+                            <property name="left_padding">12</property>
+                            <child>
+                              <object class="GtkAlignment" id="alignment15">
+                                <property name="visible">True</property>
+                                <property name="top_padding">6</property>
+                                <property name="left_padding">12</property>
+                                <child>
+                                  <object class="GtkVBox" id="vbox10">
+                                    <property name="visible">True</property>
+                                    <property name="orientation">vertical</property>
+                                    <property name="spacing">6</property>
+                                    <child>
+                                      <object class="GtkCheckButton" id="checkbutton_use_on_off_hotkey">
+                                        <property name="label" translatable="yes">Use toggle shortcut keys to enable or disable an input method</property>
+                                        <property name="visible">True</property>
+                                        <property name="can_focus">True</property>
+                                        <property name="receives_default">False</property>
+                                        <property name="draw_indicator">True</property>
+                                      </object>
+                                      <packing>
+                                        <property name="expand">False</property>
+                                        <property name="fill">False</property>
+                                        <property name="position">0</property>
+                                      </packing>
+                                    </child>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child type="label">
+                          <object class="GtkLabel" id="label50">
+                            <property name="visible">True</property>
+                            <property name="label" translatable="yes">&lt;b&gt;Hot keys setting&lt;/b&gt;</property>
+                            <property name="use_markup">True</property>
+                          </object>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">False</property>
+                        <property name="position">2</property>
                       </packing>
                     </child>
                   </object>

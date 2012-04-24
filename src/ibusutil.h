@@ -43,4 +43,18 @@
  */
 const gchar *    ibus_get_language_name         (const gchar    *_locale);
 
+/**
+ * ibus_bus_use_bridge_hotkey:
+ * @bus: An #IBusBus.
+ * @returns: %TRUE if @bus use bridge hotkey, %FALSE otherwise.
+ */
+gboolean         ibus_use_bridge_hotkey (void);
+
+/**
+ * ibus_bus_get_default_bridge_engine_name:
+ * @bus: An #IBusBus.
+ * @returns: A default bridge engine name.
+ */
+const gchar *    ibus_get_default_bridge_engine_name (void);
+
 #endif

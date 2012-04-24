@@ -212,6 +212,22 @@ class Setup(object):
             self.__config.get_value("general", "use_global_engine", False))
         self.__checkbutton_use_global_engine.connect("toggled", self.__checkbutton_use_global_engine_toggled_cb)
 
+        # hotkey settings
+        if ibus.use_bridge_hotkey():
+            self.__set_bridge_hotkey_labels()
+            self.__checkbutton_use_on_off_hotkey = \
+                self.__builder.get_object("checkbutton_use_on_off_hotkey")
+            self.__checkbutton_use_on_off_hotkey.set_active(
+                not self.__config.get_value("general/hotkey",
+                                            "use_bridge_hotkey",
+                                            True))
+            self.__checkbutton_use_on_off_hotkey.connect("toggled",
+                self.__checkbutton_use_on_off_hotkey_cb)
+        else:
+            checkbutton = self.__builder.get_object("checkbutton_use_on_off_hotkey")
+            checkbutton.hide()
+            checkbutton.set_no_show_all(True)
+
         # init engine page
         self.__engines = self.__bus.list_engines()
         self.__combobox = self.__builder.get_object("combobox_engines")
@@ -510,6 +526,35 @@ class Setup(object):
     def __checkbutton_use_global_engine_toggled_cb(self, button):
         value = self.__checkbutton_use_global_engine.get_active()
         self.__config.set_value("general", "use_global_engine", value)
+
+    def __checkbutton_use_on_off_hotkey_cb(self, button):
+        value = self.__checkbutton_use_on_off_hotkey.get_active()
+        self.__config.set_value("general/hotkey", "use_bridge_hotkey",
+                                not value)
+        self.__set_bridge_hotkey_labels()
+
+    def __set_bridge_hotkey_labels(self):
+        label = self.__builder.get_object("label_trigger_hotkey")
+        label_enable = self.__builder.get_object("label_enable")
+        hbox_enable = self.__builder.get_object("hbox_enable")
+        label_disable = self.__builder.get_object("label_disable")
+        hbox_disable = self.__builder.get_object("hbox_disable")
+        if self.__config.get_value("general/hotkey", "use_bridge_hotkey", True):
+            label.set_label(_("Toggle input methods:"))
+            label.set_tooltip_text(_("The shortcut keys to toggle "
+                                     "the previous and next input methods"))
+            label_enable.hide()
+            hbox_enable.hide()
+            label_disable.hide()
+            hbox_disable.hide()
+        else:
+            label.set_label(_("Enable or disable:"))
+            label.set_tooltip_text(_("The shortcut keys for turning "
+                                     "input method on or off"))
+            label_enable.show()
+            hbox_enable.show()
+            label_disable.show()
+            hbox_disable.show()
 
     def __config_value_changed_cb(self, bus, section, name, value):
         pass

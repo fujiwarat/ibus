@@ -1219,6 +1219,33 @@ ibus_input_context_set_engine (IBusInputContext *context,
                        );
 }
 
+void
+ibus_input_context_set_xkb_engines (IBusInputContext *context,
+                                    GList            *list)
+{
+    GVariantBuilder builder;
+    GList *p;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT (context));
+    g_assert (list);
+
+    g_variant_builder_init (&builder, G_VARIANT_TYPE ("av"));
+    for (p = list; p; p = p->next) {
+        g_variant_builder_add (&builder, "v",
+                               ibus_serializable_serialize ((IBusSerializable *) p->data));
+    }
+
+    g_dbus_proxy_call ((GDBusProxy *) context,
+                       "SetXKBEngines",                     /* method_name */
+                       g_variant_new ("(av)", &builder),    /* parameters */
+                       G_DBUS_CALL_FLAGS_NONE,              /* flags */
+                       -1,                                  /* timeout */
+                       NULL,                                /* cancellable */
+                       NULL,                                /* callback */
+                       NULL                                 /* user_data */
+                       );
+}
+
 #define DEFINE_FUNC(name, Name)                                         \
     void                                                                \
     ibus_input_context_##name (IBusInputContext *context)               \

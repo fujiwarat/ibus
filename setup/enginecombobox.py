@@ -64,6 +64,9 @@ class EngineComboBox(gtk.ComboBox):
         self.__model.set(iter1, 0, 0)
         lang = {}
         for e in engines:
+            if ibus.use_bridge_hotkey() and \
+               e.name.startswith(ibus.DEFAULT_BRIDGE_ENGINE_NAME):
+                continue
             l = ibus.get_language_name(e.language)
             if l not in lang:
                 lang[l] = []

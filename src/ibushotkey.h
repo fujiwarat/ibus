@@ -179,5 +179,16 @@ GQuark           ibus_hotkey_profile_lookup_hotkey
                                                  guint               keyval,
                                                  guint               modifiers);
 
+/**
+ * ibus_hotkey_profile_foreach_hotkey:
+ * @profile: An IBusHotkeyProfile.
+ * @func: (scope call): A GTraverseFunc for g_tree_traverse.
+ * @user_data: A gpointer for g_tree_traverse.
+ */
+void             ibus_hotkey_profile_foreach_hotkey
+                                                (IBusHotkeyProfile  *profile,
+                                                 GTraverseFunc       func,
+                                                 gpointer            user_data);
+
 G_END_DECLS
 #endif

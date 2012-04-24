@@ -562,3 +562,14 @@ ibus_hotkey_profile_lookup_hotkey (IBusHotkeyProfile *profile,
 
     return (GQuark) GPOINTER_TO_UINT (g_tree_lookup (priv->hotkeys, &hotkey));
 }
+
+void
+ibus_hotkey_profile_foreach_hotkey (IBusHotkeyProfile *profile,
+                                    GTraverseFunc      func,
+                                    gpointer           user_data)
+{
+    IBusHotkeyProfilePrivate *priv;
+    priv = IBUS_HOTKEY_PROFILE_GET_PRIVATE (profile);
+
+    g_tree_foreach (priv->hotkeys, func, user_data);
+}

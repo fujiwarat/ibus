@@ -19,7 +19,7 @@
       <owner>ibus</owner>
       <type>list</type>
       <list_type>string</list_type>
-      <default>[Control+space,Zenkaku_Hankaku,Alt+Kanji,Alt+grave,Hangul,Alt+Release+Alt_R]</default>
+      <default>[@TRIGGER_HOTKEYS@]</default>
       <locale name="C">
         <short>Trigger shortcut keys</short>
 	    <long>The shortcut keys for turning input method on or off</long>
@@ -100,6 +100,19 @@
       <locale name="C">
         <short>Prev engine shortcut keys</short>
 	    <long>The shortcut keys for switching to the previous input method</long>
+      </locale>
+    </schema>
+    <schema>
+      <key>/schemas/desktop/ibus/general/hotkey/use_bridge_hotkey</key>
+      <applyto>/desktop/ibus/general/hotkey/use_bridge_hotkey</applyto>
+      <owner>ibus</owner>
+      <type>bool</type>
+      <default>true</default>
+      <locale name="C">
+        <short>Use bridge hotkey</short>
+	    <long>Use trigger keys to toggle the prev and next IM engines
+                  if true. Use trigger keys to toggle an enable and 
+                  disabled IM engine if false.</long>
       </locale>
     </schema>
     <schema>

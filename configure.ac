@@ -486,6 +486,34 @@ else
     enable_surrounding_text="no (disabled, use --enable-surrounding-text to enable)"
 fi
 
+# Option for bridge hotkey
+AC_ARG_ENABLE(bridge-hotkey,
+    AS_HELP_STRING([--enable-bridge-hotkey],
+        [Enable bridge hotkey instead of ON/OFF hotkey]),
+    [enable_bridge_hotkey=$enableval],
+    [enable_bridge_hotkey=no]
+)
+
+if test x"$enable_bridge_hotkey" = x"yes"; then
+    USE_BRIDGE_HOTKEY=1
+    TRIGGER_HOTKEYS="Control+space"
+else
+    USE_BRIDGE_HOTKEY=0
+    TRIGGER_HOTKEYS="Control+space,Zenkaku_Hankaku,Alt+Kanji,Alt+grave,Hangul,Alt+Release+Alt_R"
+    enable_bridge_hotkey="no (disabled, use --enable-bridge-hotkey to enable)"
+fi
+AC_SUBST(USE_BRIDGE_HOTKEY)
+AC_SUBST(TRIGGER_HOTKEYS)
+
+# Define default bridge engine name
+AC_ARG_WITH(bridge-engine,
+    AS_HELP_STRING([--with-bridge-engine[=bridge_engine_name]],
+        [Set bridge engine name in IM bridge hotkey. (default: xkb:layout:default:)]),
+    [DEFAULT_BRIDGE_ENGINE_NAME=$with_bridge_engine],
+    [DEFAULT_BRIDGE_ENGINE_NAME="xkb:layout:default:"]
+)
+AC_SUBST(DEFAULT_BRIDGE_ENGINE_NAME)
+
 # Check iso-codes.
 PKG_CHECK_MODULES(ISOCODES, [
     iso-codes
@@ -512,6 +540,7 @@ bus/Makefile
 util/Makefile
 util/IMdkit/Makefile
 data/Makefile
+data/ibus.schemas.in
 data/icons/Makefile
 data/keymaps/Makefile
 data/dconf/Makefile
@@ -564,5 +593,7 @@ Build options:
   No snooper regexes        "$NO_SNOOPER_APPS"
   Panel icon                "$IBUS_ICON_KEYBOARD"
   Enable surrounding-text   $enable_surrounding_text
+  Enable bridge hotkey      $enable_bridge_hotkey
+  Default bridge engine     $DEFAULT_BRIDGE_ENGINE_NAME
 ])
 

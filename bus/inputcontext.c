@@ -90,6 +90,12 @@ struct _BusInputContext {
 
     /* incompleted set engine by desc request */
     SetEngineByDescData *data;
+
+    /* if init engine */
+    gboolean inited_engine;
+
+    /* previous hotkey engine for bridge hotkey mode */
+    IBusEngineDesc *prev_hotkey_engine;
 };
 
 struct _BusInputContextClass {
@@ -122,6 +128,7 @@ enum {
     DISABLED,
     ENGINE_CHANGED,
     REQUEST_ENGINE,
+    SET_XKB_ENGINES,
     LAST_SIGNAL,
 };
 
@@ -264,6 +271,9 @@ static const gchar introspection_xml[] =
     "    </method>"
     "    <method name='GetEngine'>"
     "      <arg direction='out' type='v' name='desc' />"
+    "    </method>"
+    "    <method name='SetXKBEngines'>"
+    "      <arg direction='in' type='av' name='engines' />"
     "    </method>"
     "    <method name='SetSurroundingText'>"
     "      <arg direction='in' type='v' name='text' />"
@@ -586,6 +596,17 @@ bus_input_context_class_init (BusInputContextClass *class)
             1,
             G_TYPE_STRING);
 
+    context_signals[SET_XKB_ENGINES] =
+        g_signal_new (I_("set-xkb-engines"),
+            G_TYPE_FROM_CLASS (class),
+            G_SIGNAL_RUN_LAST,
+            0,
+            NULL, NULL,
+            bus_marshal_VOID__OBJECT,
+            G_TYPE_NONE,
+            1,
+            G_TYPE_POINTER);
+
     text_empty = ibus_text_new_from_string ("");
     g_object_ref_sink (text_empty);
     lookup_table_empty = ibus_lookup_table_new (9 /* page size */, 0, FALSE, FALSE);
@@ -646,6 +667,11 @@ bus_input_context_destroy (BusInputContext *context)
     if (context->client) {
         g_free (context->client);
         context->client = NULL;
+    }
+
+    if (context->prev_hotkey_engine) {
+        g_object_unref (context->prev_hotkey_engine);
+        context->prev_hotkey_engine = NULL;
     }
 
     IBUS_OBJECT_CLASS (bus_input_context_parent_class)->destroy (IBUS_OBJECT (context));
@@ -1048,6 +1074,32 @@ _ic_get_engine (BusInputContext       *context,
 }
 
 /**
+ * _ic_set_xkb_engines:
+ *
+ * Implement the "SetXKBEngines" method call of the org.freedesktop.IBus.InputContext interface.
+ */
+static void
+_ic_set_xkb_engines (BusInputContext       *context,
+                     GVariant              *parameters,
+                     GDBusMethodInvocation *invocation)
+{
+    GVariantIter *iter = NULL;
+    GVariant *var;
+    GList *list = NULL;
+
+    g_variant_get_child (parameters, 0, "av", &iter);
+    while (g_variant_iter_loop (iter, "v", &var)) {
+        list = g_list_append (list, ibus_serializable_deserialize (var));
+    }
+    g_variant_iter_free (iter);
+
+    g_signal_emit (context,
+                   context_signals[SET_XKB_ENGINES], 0,
+                   list);
+    return;
+}
+
+/**
  * bus_input_context_service_method_call:
  *
  * Handle a D-Bus method call whose destination and interface name are both "org.freedesktop.IBus.InputContext"
@@ -1126,6 +1178,7 @@ bus_input_context_service_method_call (IBusService            *service,
         { "IsEnabled",         _ic_is_enabled },
         { "SetEngine",         _ic_set_engine },
         { "GetEngine",         _ic_get_engine },
+        { "SetXKBEngines",     _ic_set_xkb_engines },
         { "SetSurroundingText", _ic_set_surrounding_text},
     };
 
@@ -2218,6 +2271,7 @@ bus_input_context_set_engine (BusInputContext *context,
     }
     else {
         gint i;
+        context->inited_engine = TRUE;
         context->engine = engine;
         g_object_ref (context->engine);
 
@@ -2545,4 +2599,31 @@ bus_input_context_get_client (BusInputContext *context)
 {
     g_assert (BUS_IS_INPUT_CONTEXT (context));
     return context->client;
+}
+
+gboolean
+bus_input_context_inited_engine (BusInputContext *context)
+{
+    g_assert (BUS_IS_INPUT_CONTEXT (context));
+    return context->inited_engine;
+}
+
+IBusEngineDesc *
+bus_input_context_get_prev_hotkey_engine (BusInputContext *context)
+{
+    g_assert (BUS_IS_INPUT_CONTEXT (context));
+    return context->prev_hotkey_engine;
+}
+
+void
+bus_input_context_set_prev_hotkey_engine (BusInputContext *context,
+                                          IBusEngineDesc  *desc)
+{
+    g_assert (BUS_IS_INPUT_CONTEXT (context));
+    g_assert (desc == NULL || IBUS_IS_ENGINE_DESC (desc));
+
+    if (context->prev_hotkey_engine) {
+        g_object_unref (context->prev_hotkey_engine);
+    }
+    context->prev_hotkey_engine = desc ? g_object_ref (desc) : NULL;
 }

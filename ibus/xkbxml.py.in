@@ -33,6 +33,8 @@ import enginedesc
 from xml.sax.saxutils import XMLFilterBase, XMLGenerator
 from xml.sax._exceptions import SAXParseException
 from cStringIO import StringIO
+from _config import DEFAULT_BRIDGE_ENGINE_NAME
+from _config import get_ICON_KEYBOARD
 
 try:
     from glib import get_user_config_dir
@@ -315,6 +317,8 @@ class XKBConfigRegistry():
             engine_layout = layout
 
         icon = 'ibus-engine'
+        if name.startswith(DEFAULT_BRIDGE_ENGINE_NAME):
+            icon = get_ICON_KEYBOARD()
 
         engine = enginedesc.EngineDesc(name, longname, desc, lang,
                                        'LGPL2.1',

@@ -172,8 +172,12 @@ class EngineTreeView(gtk.TreeView):
         for e in engines:
             if e in self.__engines:
                 continue
-            iter = self.__model.append(None)
-            self.__model.set(iter, 0, e)
+            if ibus.use_bridge_hotkey() and \
+               e.name.startswith(ibus.DEFAULT_BRIDGE_ENGINE_NAME):
+                pass
+            else:
+                iter = self.__model.append(None)
+                self.__model.set(iter, 0, e)
             self.__engines.add(e)
         self.__emit_changed()
 

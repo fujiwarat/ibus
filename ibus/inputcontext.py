@@ -28,6 +28,7 @@ import sys
 import gobject
 import dbus
 import dbus.lowlevel
+import _config
 import object
 import common
 import serializable
@@ -283,8 +284,22 @@ class InputContext(object.Object):
         except:
             return None
 
+    def __handle_ic_reply(self):
+        pass
+
+    def __handle_ic_error(self, e):
+        print self.__gtype_name__, str(e)
+
     def set_engine(self, engine):
-        return self.__context.SetEngine(engine.name)
+        return self.__context.SetEngine(engine.name,
+                                        reply_handler=self.__handle_ic_reply,
+                                        error_handler=self.__handle_ic_error)
+
+    def set_xkb_engines(self, engines):
+        engines = map(lambda e: serializable.serialize_object(e), engines)
+        return self.__context.SetXKBEngines(engines,
+                                            reply_handler=self.__handle_ic_reply,
+                                            error_handler=self.__handle_ic_error)
 
     def introspect(self):
         return self.__context.Introspect()
