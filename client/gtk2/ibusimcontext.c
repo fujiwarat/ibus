@@ -1416,23 +1416,31 @@ static void
 _ibus_context_disabled_cb (IBusInputContext *ibuscontext,
                            IBusIMContext    *ibusimcontext)
 {
+    gboolean flag = FALSE;
     IDEBUG ("%s", __FUNCTION__);
     ibusimcontext->enable = FALSE;
 
     /* clear preedit */
+    flag = ibusimcontext->preedit_visible;
     ibusimcontext->preedit_visible = FALSE;
+    flag |= (ibusimcontext->preedit_cursor_pos != 0);
     ibusimcontext->preedit_cursor_pos = 0;
+    flag |= (ibusimcontext->preedit_string != NULL &&
+             *ibusimcontext->preedit_string != '\0');
     g_free (ibusimcontext->preedit_string);
     ibusimcontext->preedit_string = NULL;
 
-    g_signal_emit (ibusimcontext, _signal_preedit_changed_id, 0);
-    g_signal_emit (ibusimcontext, _signal_preedit_end_id, 0);
+    if (flag) {
+        g_signal_emit (ibusimcontext, _signal_preedit_changed_id, 0);
+        g_signal_emit (ibusimcontext, _signal_preedit_end_id, 0);
+    }
 }
 
 static void
 _ibus_context_destroy_cb (IBusInputContext *ibuscontext,
                           IBusIMContext    *ibusimcontext)
 {
+    gboolean flag = FALSE;
     IDEBUG ("%s", __FUNCTION__);
     g_assert (ibusimcontext->ibuscontext == ibuscontext);
 
@@ -1442,13 +1450,19 @@ _ibus_context_destroy_cb (IBusInputContext *ibuscontext,
     ibusimcontext->enable = FALSE;
 
     /* clear preedit */
+    flag = ibusimcontext->preedit_visible;
     ibusimcontext->preedit_visible = FALSE;
+    flag |= (ibusimcontext->preedit_cursor_pos != 0);
     ibusimcontext->preedit_cursor_pos = 0;
+    flag |= (ibusimcontext->preedit_string != NULL &&
+             *ibusimcontext->preedit_string != '\0');
     g_free (ibusimcontext->preedit_string);
     ibusimcontext->preedit_string = NULL;
 
-    g_signal_emit (ibusimcontext, _signal_preedit_changed_id, 0);
-    g_signal_emit (ibusimcontext, _signal_preedit_end_id, 0);
+    if (flag) {
+        g_signal_emit (ibusimcontext, _signal_preedit_changed_id, 0);
+        g_signal_emit (ibusimcontext, _signal_preedit_end_id, 0);
+    }
 }
 
 static void
