@@ -63,6 +63,13 @@ class Panel : IBus.PanelService {
                                                    GLib.str_equal);
     private Gdk.RGBA m_xkb_icon_rgba = Gdk.RGBA(){
             red = 0.0, green = 0.0, blue = 0.0, alpha = 1.0 };
+    private GkbdLayout m_gkbdlayout = null;
+    private XKBLayout m_xkblayout = null;
+    private string[] m_layouts = {};
+    private string[] m_variants = {};
+    private int m_fallback_lock_id = -1;
+    private bool m_changed_xkb_option = false;
+    private GLib.Timer m_changed_layout_timer;
 
     private GLib.List<Keybinding> m_keybindings = new GLib.List<Keybinding>();
 
@@ -113,6 +120,14 @@ class Panel : IBus.PanelService {
 
     ~Panel() {
         unbind_switch_shortcut();
+
+        if (HAVE_IBUS_GKBD && m_gkbdlayout != null) {
+            m_gkbdlayout.changed.disconnect(gkbdlayout_changed_cb);
+            m_gkbdlayout.stop_listen();
+            m_gkbdlayout = null;
+        }
+
+        m_xkblayout = null;
     }
 
     private void init_settings() {
@@ -487,6 +502,7 @@ class Panel : IBus.PanelService {
     }
 
     public void load_settings() {
+        init_engines_order();
         // Update m_use_system_keyboard_layout before update_engines()
         // is called.
         set_use_system_keyboard_layout();
@@ -506,6 +522,184 @@ class Panel : IBus.PanelService {
         set_xkb_icon_rgba();
 
         set_version();
+    }
+
+    private void gkbdlayout_changed_cb() {
+        /* The callback is called four times after set_layout is called
+         * so check the elapsed and take the first signal only. */
+        double elapsed = m_changed_layout_timer.elapsed();
+        if (elapsed < 1.0 && elapsed > 0.0) {
+            return;
+        }
+
+        if (m_fallback_lock_id != -1) {
+            /* Call lock_group only when set_layout is called. */
+            m_gkbdlayout.lock_group(m_fallback_lock_id);
+            m_fallback_lock_id = -1;
+        } else {
+            /* Reset default layout when gnome-control-center is called. */
+            m_xkblayout.reset_layout();
+        }
+
+        update_xkb_engines();
+        m_changed_layout_timer.reset();
+    }
+
+    private void init_gkbd() {
+        m_gkbdlayout = new GkbdLayout();
+        m_gkbdlayout.changed.connect(gkbdlayout_changed_cb);
+
+        /* Probably we cannot support both keyboard and ibus indicators
+         * How can I get the engine from keymap of group_id?
+         * e.g. 'en' could be owned by xkb:en and pinyin engines. */
+        //m_gkbdlayout.group_changed.connect((object) => {});
+
+        m_changed_layout_timer = new GLib.Timer();
+        m_changed_layout_timer.start();
+        m_gkbdlayout.start_listen();
+    }
+
+    private void init_engines_order() {
+        m_xkblayout = new XKBLayout();
+        string session = Environment.get_variable("DESKTOP_SESSION");
+
+        if (HAVE_IBUS_GKBD &&
+            session != null && session.length >= 5 &&
+            session[0:5] == "gnome") {
+            init_gkbd();
+        }
+
+        update_xkb_engines();
+    }
+
+    private void update_xkb_engines() {
+        string var_layout = m_xkblayout.get_layout();
+        string var_variant = m_xkblayout.get_variant();
+        if (var_layout == "") {
+            return;
+        }
+
+        m_layouts = var_layout.split(",");
+        m_variants = var_variant.split(",");
+
+        IBus.XKBConfigRegistry registry = new IBus.XKBConfigRegistry();
+        string[] var_xkb_engine_names = {};
+        for (int i = 0; i < m_layouts.length; i++) {
+            string name = m_layouts[i];
+            string lang = null;
+
+            if (i < m_variants.length && m_variants[i] != "") {
+                name = "%s:%s".printf(name, m_variants[i]);
+                string layout = "%s(%s)".printf(name, m_variants[i]);
+                GLib.List<string> langs =
+                        registry.layout_lang_get_langs(layout);
+                if (langs.length() != 0) {
+                    lang = langs.data;
+                }
+            } else {
+                name = "%s:".printf(name);
+            }
+
+            if (lang == null) {
+                GLib.List<string> langs =
+                        registry.layout_lang_get_langs(m_layouts[i]);
+                if (langs.length() != 0) {
+                    lang = langs.data;
+                }
+            }
+
+            var_xkb_engine_names += "%s:%s:%s".printf("xkb", name, lang);
+        }
+
+        string[] engine_names =
+                m_settings_general.get_strv("preload-engines");
+        bool updated_engine_names = false;
+
+        foreach (string name in var_xkb_engine_names) {
+            if (name in engine_names)
+                continue;
+            updated_engine_names = true;
+            engine_names += name;
+        }
+
+        if (updated_engine_names)
+            m_settings_general.set_strv("preload-engines", engine_names);
+
+        string[] order_names =
+                m_settings_general.get_strv("engines-order");
+        bool updated_order_names = false;
+
+        foreach (var name in var_xkb_engine_names) {
+            if (name in order_names)
+                continue;
+            order_names += name;
+            updated_order_names = true;
+        }
+
+        if (updated_order_names)
+            m_settings_general.set_strv("engines-order", order_names);
+    }
+
+    private void set_xkb_group_layout(IBus.EngineDesc engine) {
+        int[] retval = m_xkblayout.set_layout(engine, true);
+        if (retval[0] >= 0) {
+            /* If an XKB keymap is added into the XKB group,
+             * this._gkbdlayout.lock_group will be called after
+             * 'group-changed' signal is received. */
+            m_fallback_lock_id = retval[0];
+            m_changed_xkb_option = (retval[1] != 0) ? true : false;
+        }
+    }
+
+    private bool set_gkbd_layout(IBus.EngineDesc engine) {
+        string layout = engine.get_layout();
+        string variant = engine.get_layout_variant();
+
+        /* If a previous ibus engine changed XKB options, need to set the
+         * default XKB option. */
+        if (m_changed_xkb_option == true) {
+            m_changed_xkb_option = false;
+            return false;
+        }
+
+        if (variant != "" && variant != "default") {
+            layout = "%s(%s)".printf(layout, variant);
+        }
+
+        int gkbd_len = m_gkbdlayout.get_group_names().length;
+        for (int i = 0; i < m_layouts.length && i < gkbd_len; i++) {
+            string sys_layout = m_layouts[i];
+            if (i < m_variants.length && m_variants[i] != "") {
+                sys_layout = "%s(%s)".printf(sys_layout, m_variants[i]);
+            }
+            if (sys_layout == layout) {
+                m_gkbdlayout.lock_group(i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void set_layout(IBus.EngineDesc engine) {
+        string layout = engine.get_layout();
+
+        if (layout == "" || layout == null) {
+            return;
+        }
+
+        if (m_xkblayout == null) {
+            init_engines_order();
+        }
+
+        if (HAVE_IBUS_GKBD && m_gkbdlayout != null) {
+            if (set_gkbd_layout(engine)) {
+                return;
+            }
+            set_xkb_group_layout(engine);
+            return;
+        }
+
+        m_xkblayout.set_layout(engine);
     }
 
     private void exec_setxkbmap(IBus.EngineDesc engine) {
@@ -573,7 +767,7 @@ class Panel : IBus.PanelService {
 
         // set xkb layout
         if (!m_use_system_keyboard_layout)
-            exec_setxkbmap(engine);
+            set_layout(engine);
 
         engine_contexts_insert(engine);
     }
@@ -636,6 +830,39 @@ class Panel : IBus.PanelService {
         }
     }
 
+    /* IBus.Bus.get_engines_by_names() returns 'us' engine if the name 
+     * does not exist in simple.xml and 'us' engine could be duplicated.
+     */
+    private IBus.EngineDesc[] uniq_engines(IBus.EngineDesc[] engines) {
+        if (engines.length == 0)
+            return engines;
+
+        int i = 0;
+        IBus.EngineDesc[] retval = {};
+
+        for (; i < engines.length; i++) {
+            if (engines[i].get_name() == "xkb:us::eng")
+                break;
+        }
+
+        if (i == engines.length)
+            return engines;
+
+        for (int j = 0; j < engines.length; j++) {
+            if (j <= i) {
+                retval += engines[j];
+                continue;
+            }
+
+            if (engines[i].get_name() == engines[j].get_name())
+                continue;
+
+            retval += engines[j];
+        }
+
+        return retval;
+    }
+
     private void run_preload_engines(IBus.EngineDesc[] engines, int index) {
         string[] names = {};
 
@@ -668,6 +895,7 @@ class Panel : IBus.PanelService {
         }
 
         var engines = m_bus.get_engines_by_names(names);
+        engines = uniq_engines(engines);
 
         if (m_engines.length == 0) {
             m_engines = engines;

@@ -35,6 +35,8 @@ gtkpanel.xml: gtkpanel.xml.in
 		-e 's|@libexecdir[@]|$(libexecdir)|g' $< > $@.tmp && \
 		mv $@.tmp $@
 
+HAVE_IBUS_GKBD_C = $(strip $(subst false, FALSE, $(subst true, TRUE, $(HAVE_IBUS_GKBD))))
+
 # force include config.h before gi18n.h.
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src \
@@ -51,6 +53,8 @@ AM_CFLAGS = \
 	-DG_LOG_DOMAIN=\"IBUS\" \
 	-DBINDIR=\"$(bindir)\" \
 	-DIBUS_DISABLE_DEPRECATED \
+	-DHAVE_IBUS_GKBD=$(HAVE_IBUS_GKBD_C) \
+	-DXKB_LAYOUTS_MAX_LENGTH=4 \
 	-Wno-unused-variable \
 	-Wno-unused-but-set-variable \
 	-Wno-unused-function \
@@ -94,12 +98,40 @@ AM_VALAFLAGS += \
 	$(NULL)
 endif
 
+if ENABLE_LIBGNOMEKBD
+AM_CFLAGS += \
+	@LIBGNOMEKBDUI_CFLAGS@ \
+	@ATK_CFLAGS@ \
+	$(NULL)
+
+AM_LDADD += \
+	@LIBGNOMEKBDUI_LIBS@ \
+	@ATK_LIBS@ \
+	$(NULL)
+
+AM_VALAFLAGS += \
+	--vapidir=. \
+	--metadatadir=$(top_srcdir)/bindings/vala \
+	--pkg=glib-2.0 \
+	--pkg=gmodule-2.0 \
+	--pkg=gkbd \
+	--pkg=Xkl-1.0 \
+	$(NULL)
+
+$(srcdir)/gkbdlayout.vala: $(top_builddir)/bindings/vala/gkbd.vapi
+	@cp $(srcdir)/gkbdlayout.vala.true $(srcdir)/gkbdlayout.vala
+else
+$(srcdir)/gkbdlayout.vala:
+	@cp $(srcdir)/gkbdlayout.vala.false $(srcdir)/gkbdlayout.vala
+endif
+
 libexec_PROGRAMS = ibus-ui-gtk3
 
 ibus_ui_gtk3_SOURCES = \
 	application.vala \
 	candidatearea.vala \
 	candidatepanel.vala \
+	gkbdlayout.vala \
 	handle.vala \
 	iconwidget.vala \
 	keybindingmanager.vala \
@@ -109,6 +141,7 @@ ibus_ui_gtk3_SOURCES = \
 	propertypanel.vala \
 	separator.vala \
 	switcher.vala \
+	xkblayout.vala \
 	$(NULL)
 
 ibus_ui_gtk3_LDADD = \
@@ -117,9 +150,12 @@ ibus_ui_gtk3_LDADD = \
 
 CLEANFILES = \
 	gtkpanel.xml \
+	gkbdlayout.vala \
 	$(NULL)
 
 EXTRA_DIST = \
+	gkbdlayout.vala.false \
+	gkbdlayout.vala.true \
 	gtkpanel.xml.in \
 	$(NULL)
 

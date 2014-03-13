@@ -261,6 +261,45 @@ else
     enable_wayland="no (disabled, use --enable-wayland to enable)"
 fi
 
+# Option for XKB command.
+PKG_CHECK_MODULES(XKB,
+    [xkbfile],,
+    [XKB_LIBS="-lxkbfile"]
+)
+
+# --enable-libgnomekbd option.
+AC_ARG_ENABLE(libgnomekbd,
+    AS_HELP_STRING([--enable-libgnomekbd],
+                   [Use libgnomekbd to handle the keymaps]),
+    [enable_libgnomekbd=$enableval],
+    [enable_libgnomekbd=no]
+)
+AM_CONDITIONAL([ENABLE_LIBGNOMEKBD], [test x"$enable_libgnomekbd" = x"yes"])
+if test x"$enable_libgnomekbd" = x"yes"; then
+    # check for libgnomekbd
+    PKG_CHECK_MODULES(LIBGNOMEKBDUI, [
+        libgnomekbdui
+    ])
+    PKG_CHECK_MODULES(ATK, [
+        atk
+    ])
+    HAVE_IBUS_GKBD=true
+else
+    enable_libgnomekbd="no (disabled, use --enable-libgnomekbd to enable)"
+    HAVE_IBUS_GKBD=false
+fi
+AC_SUBST(HAVE_IBUS_GKBD)
+
+# Define XKB rules file
+AC_ARG_WITH(xkb-rules-xml,
+    AS_HELP_STRING([--with-xkb-rules-xml[=$DIR/evdev.xml]],
+        [Set evdev.xml file path (default: /usr/share/X11/xkb/rules/evdev.xml)]),
+    XKB_RULES_XML_FILE=$with_xkb_rules_xml,
+    XKB_RULES_XML_FILE="/usr/share/X11/xkb/rules/evdev.xml"
+)
+AC_DEFINE_UNQUOTED(XKB_RULES_XML_FILE, "$XKB_RULES_XML_FILE",
+    [Define file path of evdev.xml])
+
 # GObject introspection
 GOBJECT_INTROSPECTION_CHECK([0.6.8])
 
@@ -640,6 +679,7 @@ Build options:
   Panel icon                "$IBUS_ICON_KEYBOARD"
   Enable surrounding-text   $enable_surrounding_text
   Enable libnotify          $enable_libnotify
+  Build libgnomebkd         $enable_libgnomekbd
   Run test cases            $enable_tests
 ])
 

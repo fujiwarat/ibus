@@ -28,8 +28,6 @@ vapi_deps = \
 	$(top_builddir)/src/IBus-1.0.gir \
 	$(NULL)
 
-ibus-1.0.vapi: $(vapi_deps)
-
 VAPIGEN_VAPIS = ibus-1.0.vapi
 
 ibus_1_0_vapi_DEPS = gio-2.0
@@ -39,19 +37,34 @@ ibus_1_0_vapi_FILES = \
 	$(srcdir)/IBus-1.0-custom.vala \
 	$(NULL)
 
+if ENABLE_LIBGNOMEKBD
+ibus-1.0.vapi: $(vapi_deps) gkbd.vapi
+
+VAPIGEN_VAPIS += gkbd.vapi
+
+gkbd_vapi_DEPS = gtk+-3.0 glib-2.0 gmodule-2.0
+gkbd_vapi_METADATADIRS = $(srcdir)
+gkbd_vapi_FILES = /usr/share/gir-1.0/Gkbd-3.0.gir
+else
+ibus-1.0.vapi: $(vapi_deps)
+endif
+
 vapidir = $(datadir)/vala/vapi
-vapi_DATA = $(VAPIGEN_VAPIS) $(VAPIGEN_VAPIS:.vapi=.deps)
+vapi_DATA = ibus-1.0.vapi ibus-1.0.deps
 
 MAINTAINERCLEANFILES = $(VAPIGEN_VAPIS)
 
 EXTRA_DIST = \
 	$(VAPIGEN_VAPIS) \
+	Gkbd-3.0.metadata \
+	gkbd.deps \
 	IBus-1.0.metadata \
 	IBus-1.0-custom.vala \
 	ibus-1.0.deps \
 	ibus-private.vapi \
 	config.vapi \
 	xi.vapi \
+	Xkl-1.0.metadata \
 	$(NULL)
 
 -include $(top_srcdir)/git.mk

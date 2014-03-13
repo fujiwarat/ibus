@@ -202,6 +202,9 @@ typelibs_DATA = $(INTROSPECTION_GIRS:.gir=.typelib)
 CLEANFILES += $(dist_gir_DATA) $(typelibs_DATA)
 endif
 
+ibus_sources += ibusxkbxml.c
+ibus_headers += ibusxkbxml.h
+
 # gen enum types
 ibusenumtypes.h: $(ibus_headers) ibusenumtypes.h.template
 	$(AM_V_GEN) ( top_builddir=`cd $(top_builddir) && pwd`; \

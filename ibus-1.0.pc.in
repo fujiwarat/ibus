@@ -4,6 +4,7 @@ libdir=@libdir@
 includedir=@includedir@
 datadir=@datadir@
 pkgdatadir=@datadir@/ibus
+have_ibus_gkbd=@HAVE_IBUS_GKBD@
 
 Name: IBus
 Description: IBus Library

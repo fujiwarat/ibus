@@ -1135,7 +1135,17 @@ _ibus_get_engines_by_names (BusIBusImpl           *ibus,
     g_variant_builder_init (&builder, G_VARIANT_TYPE ("av"));
     while (names[i] != NULL) {
         IBusEngineDesc *desc = (IBusEngineDesc *) g_hash_table_lookup (
-                ibus->engine_table, names[i++]);
+                ibus->engine_table, names[i]);
+
+        /* preload engines return user XKB so if the engine does not
+         * exist in simple.xml, fall back to 'us' layout. */
+        if (desc == NULL && g_str_has_prefix (names[i], "xkb:")) {
+            desc = (IBusEngineDesc *) g_hash_table_lookup (
+                    ibus->engine_table, "xkb:us::eng");
+        }
+
+        i++;
+
         if (desc == NULL)
             continue;
         g_variant_builder_add (
