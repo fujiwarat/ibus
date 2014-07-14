@@ -190,16 +190,30 @@ class Setup(object):
                                     'active',
                                     Gio.SettingsBindFlags.DEFAULT)
 
+        # set preload mode
+        preload_engine_mode = \
+                self.__settings_general.get_int('preload-engine-mode')
+        button = self.__builder.get_object("checkbutton_preload_engine_mode")
+        hbox = self.__builder.get_object("hbox_customize_active_input_methods")
+        if preload_engine_mode == IBus.PreloadEngineMode.USER:
+            button.set_active(True)
+            hbox.set_sensitive(True)
+        else:
+            button.set_active(False)
+            hbox.set_sensitive(False)
+        button.connect('toggled',
+                       self.__checkbutton_preload_engine_mode_toggled_cb)
+
+        self.__settings_general.connect('changed::preload-engines',
+                self.__settings_general_preload_engines_cb)
+
         # init engine page
         self.__engines = self.__bus.list_engines()
         self.__combobox = self.__builder.get_object("combobox_engines")
         self.__combobox.set_engines(self.__engines)
 
-        tmp_dict = {}
-        for e in self.__engines:
-            tmp_dict[e.get_name()] = e
         engine_names = self.__settings_general.get_strv('preload-engines')
-        engines = [tmp_dict[name] for name in engine_names if name in tmp_dict]
+        engines = self.__get_engine_descs_from_names(engine_names)
 
         self.__treeview = self.__builder.get_object("treeview_engines")
         self.__treeview.set_engines(engines)
@@ -249,8 +263,9 @@ class Setup(object):
     def __combobox_notify_active_engine_cb(self, combobox, property):
         engine = self.__combobox.get_active_engine()
         button = self.__builder.get_object("button_engine_add")
-        button.set_sensitive(
-                engine != None and engine not in self.__treeview.get_engines())
+        button.set_sensitive(engine != None and \
+                engine.get_name() not in [e.get_name() for e \
+                                          in self.__treeview.get_engines()])
 
     def __get_engine_setup_exec_args(self, engine):
         args = []
@@ -269,6 +284,13 @@ class Setup(object):
             args.append(setup_path)
             args.append(path.basename(setup_path))
         return args
+
+    def __get_engine_descs_from_names(self, engine_names):
+        tmp_dict = {}
+        for e in self.__engines:
+            tmp_dict[e.get_name()] = e
+        engines = [tmp_dict[name] for name in engine_names if name in tmp_dict]
+        return engines
 
     def __treeview_notify_cb(self, treeview, prop):
         if prop.name not in ("active-engine", "engines"):
@@ -320,6 +342,44 @@ class Setup(object):
                 pass
             del self.__engine_setup_exec_list[name]
         self.__engine_setup_exec_list[name] = os.spawnl(os.P_NOWAIT, *args)
+
+    def __checkbutton_preload_engine_mode_toggled_cb(self, button):
+        if button.get_active():
+            self.__settings_general.set_int('preload-engine-mode',
+                                            IBus.PreloadEngineMode.USER)
+            self.__builder.get_object(
+                    "hbox_customize_active_input_methods").set_sensitive(True)
+            self.__treeview.notify('engines')
+        else:
+            message = _("The list of your saved input methods will be " \
+                        "cleared immediately and the list will be " \
+                        "configured by the login language every time. " \
+                        "Do you agree with this?")
+            dlg = Gtk.MessageDialog(message_type = Gtk.MessageType.QUESTION,
+                    transient_for = self.__window,
+                    buttons = Gtk.ButtonsType.YES_NO,
+                    text = message)
+            id = dlg.run()
+            dlg.destroy()
+            self.__flush_gtk_events()
+            if id != Gtk.ResponseType.YES:
+                button.set_active(True)
+                return
+            self.__settings_general.set_int(
+                    'preload-engine-mode',
+                    IBus.PreloadEngineMode.LANG_RELATIVE)
+            self.__builder.get_object(
+                    "hbox_customize_active_input_methods").set_sensitive(False)
+
+    def __settings_general_preload_engines_cb(self, settings, key):
+        engine_names = self.__settings_general.get_strv('preload-engines')
+        engines = self.__get_engine_descs_from_names(engine_names)
+        current_engines = self.__treeview.get_engines()
+        engines_csv = str.join(',', [e.get_name() for e in engines])
+        current_engines_csv = \
+                str.join(',', [e.get_name() for e in current_engines])
+        if engines_csv != current_engines_csv:
+            self.__treeview.set_engines(engines)
 
     def __init_bus(self):
         self.__bus = IBus.Bus()

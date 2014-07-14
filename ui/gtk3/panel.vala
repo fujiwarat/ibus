@@ -141,6 +141,10 @@ class Panel : IBus.PanelService {
                                null);
         });
 
+        m_settings_general.changed["preload-engine-mode"].connect((key) => {
+                update_im_engines();
+        });
+
         m_settings_general.changed["switcher-delay-time"].connect((key) => {
                 set_switcher_delay_time();
         });
@@ -569,7 +573,96 @@ class Panel : IBus.PanelService {
             init_gkbd();
         }
 
+        string[] preload_engines =
+                m_settings_general.get_strv("preload-engines");
+
+        bool preload_engines_inited =
+                m_settings_general.get_boolean("preload-engines-inited");
+
+        // Set preload_engines_inited = true for back compatibility
+        if (preload_engines.length != 0 && !preload_engines_inited) {
+                preload_engines_inited = true;
+                m_settings_general.set_boolean("preload-engines-inited", true);
+        }
+
         update_xkb_engines();
+
+        // Before update preload_engine_mode, update_xkb_engines() is called
+        // because "preload-engine-mode" signal calls update_im_engines().
+        if (!preload_engines_inited)
+            m_settings_general.set_int("preload-engine-mode",
+                                       IBus.PreloadEngineMode.LANG_RELATIVE);
+
+        update_im_engines();
+
+        if (!preload_engines_inited)
+            m_settings_general.set_boolean("preload-engines-inited", true);
+    }
+
+    private bool set_lang_relative_preload_engines() {
+        string locale = Intl.setlocale(LocaleCategory.CTYPE, null);
+
+        if (locale == null)
+            locale = "C";
+
+        string lang = locale.split(".")[0];
+        GLib.List<IBus.EngineDesc> engines = m_bus.list_engines();
+        string[] im_engines = {};
+
+        for (unowned GLib.List<IBus.EngineDesc> p = engines;
+             p != null;
+             p = p.next) {
+            unowned IBus.EngineDesc engine = p.data;
+            if (engine.get_language() == lang && engine.get_rank() > 0)
+                im_engines += engine.get_name();
+        }
+
+        lang = lang.split("_")[0];
+        if (im_engines.length == 0) {
+            for (unowned GLib.List<IBus.EngineDesc> p = engines;
+                 p != null;
+                 p = p.next) {
+                unowned IBus.EngineDesc engine = p.data;
+                if (engine.get_language() == lang && engine.get_rank() > 0)
+                    im_engines += engine.get_name();
+            }
+        }
+
+        if (im_engines.length == 0)
+            return false;
+
+        string[] orig_preload_engines =
+                m_settings_general.get_strv("preload-engines");
+        string[] preload_engines = {};
+
+        // clear input method engines
+        foreach (string name in orig_preload_engines) {
+            if (name.ascii_ncasecmp("xkb:", 4) != 0)
+                continue;
+
+            preload_engines += name;
+        }
+
+        foreach (string name in im_engines) {
+            if (!(name in preload_engines))
+                preload_engines += name;
+        }
+
+        if (string.joinv(",", orig_preload_engines) !=
+            string.joinv(",", preload_engines))
+            m_settings_general.set_strv("preload-engines", preload_engines);
+
+        return true;
+    }
+
+    private void update_im_engines() {
+        int preload_engine_mode =
+                m_settings_general.get_int("preload-engine-mode");
+
+        if (preload_engine_mode == IBus.PreloadEngineMode.USER)
+            return;
+
+        set_lang_relative_preload_engines();
     }
 
     private void update_xkb_engines() {

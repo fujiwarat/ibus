@@ -206,6 +206,16 @@ typedef enum {
 } IBusError;
 
 /**
+ * IBusPreloadEngineMode:
+ * @IBUS_PRELOAD_ENGINE_MODE_USER: user custimized engines
+ * @IBUS_PRELOAD_ENGINE_MODE_LANG_RELATIVE: language related engines.
+ */
+typedef enum {
+    IBUS_PRELOAD_ENGINE_MODE_USER          = 0,
+    IBUS_PRELOAD_ENGINE_MODE_LANG_RELATIVE = 1,
+} IBusPreloadEngineMode;
+
+/**
  * IBusRectangle:
  * @x: x coordinate.
  * @y: y coordinate.
