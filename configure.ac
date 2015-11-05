@@ -206,6 +206,15 @@ AC_ARG_ENABLE(wayland,
 )
 AM_CONDITIONAL([ENABLE_WAYLAND], [test x"$enable_wayland" = x"yes"])
 
+# --disable-fbterm option.
+AC_ARG_ENABLE(fbterm,
+    AS_HELP_STRING([--disable-fbterm],
+                   [Do not build fbterm client]),
+    [enable_fbterm=$enableval],
+    [enable_fbterm=yes]
+)
+AM_CONDITIONAL([ENABLE_FBTERM], [test x"$enable_fbterm" = x"yes"])
+
 # --enable-appindicator option.
 AC_ARG_ENABLE(appindicator,
     AS_HELP_STRING([--enable-appindicator],
@@ -265,6 +274,10 @@ if test x"$enable_wayland" = x"yes"; then
     ])
 else
     enable_wayland="no (disabled, use --enable-wayland to enable)"
+fi
+
+if test x"$enable_fbterm" != x"yes"; then
+    enable_fbtrem="no (disabled, use --enable-fbterm to enable)"
 fi
 
 enable_appindicator_engine_icon="no"
@@ -602,6 +615,7 @@ Makefile
 ibus-1.0.pc
 ibus.spec
 client/Makefile
+client/fbterm/Makefile
 client/gtk2/Makefile
 client/gtk3/Makefile
 client/x11/Makefile
@@ -654,6 +668,7 @@ Build options:
   Build gtk2 immodule           $enable_gtk2
   Build gtk3 immodule           $enable_gtk3
   Build XIM agent server        $enable_xim
+  Build fbterm support          $enable_fbterm
   Build wayland support         $enable_wayland
   Build appindicator support    $enable_appindicator
   Build appindicator engine icon $enable_appindicator_engine_icon

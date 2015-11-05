@@ -2,8 +2,8 @@
 #
 # ibus - The Input Bus
 #
-# Copyright (c) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
-# Copyright (c) 2007-2010 Red Hat, Inc.
+# Copyright (c) 2007-2015 Peng Huang <shawn.p.huang@gmail.com>
+# Copyright (c) 2007-2015 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -36,11 +36,16 @@ if ENABLE_WAYLAND
 WAYLAND = wayland
 endif
 
+if ENABLE_FBTERM
+FBTERM = fbterm
+endif
+
 SUBDIRS = \
 	$(GTK2) \
 	$(GTK3) \
 	$(X11) \
 	$(WAYLAND) \
+	$(FBTERM) \
 	$(NULL)
 
 -include $(top_srcdir)/git.mk
