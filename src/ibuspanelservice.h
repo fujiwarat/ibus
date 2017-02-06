@@ -1,6 +1,8 @@
 /* -*- mode: C; c-basic-offset: 4; indent-tabs-mode: nil; -*- */
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2017 Red Hat, Inc.
  * Copyright (c) 2009, Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -30,6 +32,8 @@
 #define __IBUS_PANEL_SERVICE_H_
 
 #include "ibusconnection.h"
+#include "ibusinputcontext.h"
+#include "ibuslookuptable.h"
 #include "ibuslookuptable.h"
 #include "ibusservice.h"
 #include "ibusproplist.h"
@@ -134,10 +138,13 @@ struct _IBusPanelServiceClass {
                                             IBusError             **error);
     gboolean (* state_changed)             (IBusPanelService       *panel,
                                             IBusError             **error);
+    gboolean (* set_cursor_object)         (IBusPanelService       *panel,
+                                            IBusCursorLocation     *cursor,
+                                            IBusError             **error);
 
     /*< private >*/
     /* padding */
-    gpointer pdummy[8];  // We can add 8 pointers without breaking the ABI.
+    gpointer pdummy[7];  // We can add 7 pointers without breaking the ABI.
 };
 
 GType            ibus_panel_service_get_type  (void);

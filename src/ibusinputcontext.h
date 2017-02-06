@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -55,10 +56,18 @@
 #define IBUS_INPUT_CONTEXT_GET_CLASS(obj)   \
     (G_TYPE_INSTANCE_GET_CLASS ((obj), IBUS_TYPE_INPUT_CONTEXT, IBusInputContextClass))
 
+#define IBUS_TYPE_CURSOR_LOCATION           \
+    (ibus_cursor_location_get_type ())
+#define IBUS_IS_CURSOR_LOCATION(obj)        \
+    (G_TYPE_CHECK_INSTANCE_TYPE ((obj), IBUS_TYPE_CURSOR_LOCATION))
+
 G_BEGIN_DECLS
 
 typedef struct _IBusInputContext IBusInputContext;
 typedef struct _IBusInputContextClass IBusInputContextClass;
+typedef struct _IBusCursorLocation IBusCursorLocation;
+typedef struct _IBusCursorLocationPrivate IBusCursorLocationPrivate;
+typedef struct _IBusCursorLocationClass IBusCursorLocationClass;
 
 /**
  * IBusInputContext:
@@ -77,6 +86,23 @@ struct _IBusInputContextClass {
     /*< private >*/
     /* padding */
     gpointer pdummy[24];
+};
+
+/**
+ * IBusCursorLocation:
+ *
+ * A cursor location in input method clients.
+ */
+struct _IBusCursorLocation {
+    IBusSerializable parent;
+    /* instance members */
+    /*< public >*/
+    /*< private >*/
+    IBusCursorLocationPrivate *priv;
+};
+
+struct _IBusCursorLocationClass {
+    IBusSerializableClass parent;
 };
 
 /**
@@ -216,6 +242,20 @@ void         ibus_input_context_set_cursor_location
                                              gint32              y,
                                              gint32              w,
                                              gint32              h);
+
+/**
+ * ibus_input_context_set_cursor_varargs:
+ * @context: An IBusInputContext.
+ * @first_property_name: A string property.
+ *
+ * Set the cursor location of IBus input context with a property list
+ * which is terminated by NULL.
+ */
+void         ibus_input_context_set_cursor_varargs
+                                       (IBusInputContext  *context,
+                                        const gchar       *first_property_name,
+                                                          ...);
+
 /**
  * ibus_input_context_set_capabilities:
  * @context: An IBusInputContext.
@@ -325,6 +365,67 @@ IBusEngineDesc
 void         ibus_input_context_set_engine  (IBusInputContext   *context,
                                              const gchar        *name);
 
+
+GType        ibus_cursor_location_get_type  (void);
+
+/**
+ * ibus_cursor_location_new:
+ * @first_property_name: Name of the first property.
+ * @...: the NULL-terminated arguments of the properties and values.
+ *
+ * Creates a new #IBusCursorLocation.
+ * ibus_engine_desc_new() supports the va_list format.
+ * name property is required. e.g.
+ * ibus_engine_desc_new_varargs("x", 100, "y", 200, "width", 100, "height",
+ * 50, NULL)
+ *
+ * Returns: A newly allocated IBusCursorLocation.
+ */
+IBusCursorLocation *
+             ibus_cursor_location_new       (const gchar *first_property_name,
+                                             ...);
+
+/**
+ * ibus_cursor_location_get_x:
+ * @cursor: An IBusCursorLocation
+ *
+ * Returns: X coordiante of the cursor location.
+ */
+int          ibus_cursor_location_get_x     (IBusCursorLocation *cursor);
+
+/**
+ * ibus_cursor_location_get_y:
+ * @cursor: An IBusCursorLocation
+ *
+ * Returns: Y coordiante of the cursor location.
+ */
+int          ibus_cursor_location_get_y     (IBusCursorLocation *cursor);
+
+/**
+ * ibus_cursor_location_get_width:
+ * @cursor: An #IBusCursorLocation
+ *
+ * Returns: the width of the cursor.
+ */
+int          ibus_cursor_location_get_width (IBusCursorLocation *cursor);
+
+/**
+ * ibus_cursor_location_get_height:
+ * @cursor: An #IBusCursorLocation
+ *
+ * Returns: the height of the cursor.
+ */
+int          ibus_cursor_location_get_height
+                                            (IBusCursorLocation *cursor);
+
+/**
+ * ibus_cursor_location_get_display_name:
+ * @cursor: An #IBusCursorLocation
+ *
+ * Returns: the value of $DISPLAY.
+ */
+const gchar *ibus_cursor_location_get_display_name
+                                            (IBusCursorLocation *cursor);
 
 G_END_DECLS
 #endif

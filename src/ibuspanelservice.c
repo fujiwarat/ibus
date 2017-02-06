@@ -1,6 +1,8 @@
 /* -*- mode: C; c-basic-offset: 4; indent-tabs-mode: nil; -*- */
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2017 Red Hat, Inc.
  * Copyright (c) 2009, Google Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -57,6 +59,9 @@ static gboolean ibus_panel_service_set_cursor_location   (IBusPanelService      
                                                           gint                   w,
                                                           gint                   h,
                                                           IBusError            **error);
+static gboolean ibus_panel_service_set_cursor_object     (IBusPanelService      *panel,
+                                                          IBusCursorLocation    *cursor,
+                                                          IBusError            **error);
 static gboolean ibus_panel_service_update_auxiliary_text (IBusPanelService      *panel,
                                                           IBusText              *text,
                                                           gboolean              visible,
@@ -107,6 +112,7 @@ ibus_panel_service_class_init (IBusPanelServiceClass *klass)
     klass->focus_out             = ibus_panel_service_focus_out;
     klass->register_properties   = ibus_panel_service_register_properties;
     klass->set_cursor_location   = ibus_panel_service_set_cursor_location;
+    klass->set_cursor_object     = ibus_panel_service_set_cursor_object;
     klass->update_lookup_table   = ibus_panel_service_update_lookup_table;
     klass->update_auxiliary_text = ibus_panel_service_update_auxiliary_text;
     klass->update_preedit_text   = ibus_panel_service_update_preedit_text;
@@ -477,6 +483,33 @@ ibus_panel_service_ibus_message (IBusPanelService *panel,
             reply = ibus_message_new_method_return (message);
         }
     }
+    else if (ibus_message_is_method_call (message,
+                                          IBUS_INTERFACE_PANEL,
+                                          "SetCursorObject")) {
+        IBusCursorLocation *cursor = NULL;
+        gboolean retval;
+        IBusError *error = NULL;
+
+        retval = ibus_message_get_args (message,
+                                        &error,
+                                        IBUS_TYPE_CURSOR_LOCATION, &cursor,
+                                        G_TYPE_INVALID);
+
+        cursor = g_object_ref_sink (cursor);
+        if (!retval || !IBUS_PANEL_SERVICE_GET_CLASS (panel)->
+                set_cursor_object(panel,
+                                  cursor,
+                                  &error)) {
+            reply = ibus_message_new_error(message,
+                                           error->name,
+                                           error->message);
+            ibus_error_free (error);
+        }
+        else {
+            reply = ibus_message_new_method_return (message);
+        }
+        g_object_unref (cursor);
+    }
 
     if (reply) {
         ibus_connection_send (connection, reply);
@@ -528,6 +561,14 @@ ibus_panel_service_set_cursor_location (IBusPanelService *panel,
                                         gint              w,
                                         gint              h,
                                         IBusError       **error)
+{
+    return ibus_panel_service_not_implemented(panel, error);
+}
+
+static gboolean
+ibus_panel_service_set_cursor_object (IBusPanelService    *panel,
+                                      IBusCursorLocation  *cursor,
+                                      IBusError          **error)
 {
     return ibus_panel_service_not_implemented(panel, error);
 }

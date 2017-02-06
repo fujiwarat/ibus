@@ -85,7 +85,9 @@ void             bus_panel_proxy_set_cursor_location
                                                      gint32              x,
                                                      gint32              y,
                                                      gint32              w,
-                                                     gint32              h);
+                                                     gint32              h,
+                                                     IBusCursorLocation
+                                                                       *cursor);
 void             bus_panel_proxy_update_preedit_text(BusPanelProxy      *panel,
                                                      IBusText           *text,
                                                      guint               cursor_pos,

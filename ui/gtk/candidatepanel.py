@@ -3,7 +3,8 @@
 # ibus - The Input Bus
 #
 # Copyright(c) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
-# Copyright(c) 2007-2010 Red Hat, Inc.
+# Copyright(c) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+# Copyright(c) 2007-2017 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -24,6 +25,7 @@ import operator
 import gtk
 import gtk.gdk as gdk
 import gobject
+import os
 import pango
 import ibus
 from ibus._gtk import PangoAttrList
@@ -219,14 +221,23 @@ class CandidatePanel(gtk.VBox):
         self.__aux_attrs = pango.AttrList()
         self.__lookup_table = None
 
-        self.__cursor_location = (0, 0, 0, 0)
+        self.__cursor_location = (0, 0, 0, 0, None)
         self.__moved_cursor_location = None
+        self.__displays = {}
+        display_name = os.environ['DISPLAY']
+        if display_name == None:
+            display_name = ':0.0'
+        self.__displays[display_name] = gdk.display_get_default()
+        self.__displays['default'] = self.__displays[display_name]
 
         self.__recreate_ui()
 
     def __handle_move_end_cb(self, handle):
         # store moved location
-        self.__moved_cursor_location = self.__toplevel.get_position() + (self.__cursor_location[2], self.__cursor_location[3])
+        self.__moved_cursor_location = self.__toplevel.get_position() + \
+                (self.__cursor_location[2],
+                 self.__cursor_location[3],
+                 self.__cursor_location[4])
 
     def __recreate_ui(self):
         for w in self:
@@ -428,11 +439,14 @@ class CandidatePanel(gtk.VBox):
         self.__lookup_table.cursor_down()
         self.__refresh_candidates()
 
-    def set_cursor_location(self, x, y, w, h):
+    def set_cursor_location(self, x, y, w, h, display_name=None):
         # if cursor location is changed, we reset the moved cursor location
-        if self.__cursor_location != (x, y, w, h):
-            self.__cursor_location = (x, y, w, h)
-            self.__moved_cursor_location = None
+        if self.__cursor_location != (x, y, w, h, display_name):
+            self.__cursor_location = (x, y, w, h, display_name)
+            if display_name != None and display_name not in self.__displays \
+               and display_name.find(':') >= 0:
+                display = gtk.gdk.Display(display_name = display_name)
+                self.__displays[display_name] = display
             self.__check_position()
 
     def __check_show_states(self):
@@ -490,8 +504,19 @@ class CandidatePanel(gtk.VBox):
 
         window_right = cursor_right + self.__toplevel.allocation.width
         window_bottom = cursor_bottom + self.__toplevel.allocation.height
+        display_name = cursor_location[4]
 
-        screen = gdk.screen_get_default()
+        if display_name != None and display_name.find(':') >= 0:
+            screen_num = 0
+            display = self.__displays[display_name]
+            screen_name = display_name.split('.')
+            if len(screen_name) > 1:
+                screen_num = int(screen_name[1])
+            screen = display.get_screen(screen_num)
+            self.__toplevel.set_screen(screen)
+        else:
+            x = cursor_location[0]
+            screen = gdk.screen_get_default()
         monitor_num = screen.get_monitor_at_point(cursor_location[0],
                                                   cursor_location[1])
         monitor_area = screen.get_monitor_geometry(monitor_num)

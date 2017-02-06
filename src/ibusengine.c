@@ -45,6 +45,7 @@ enum {
     PROPERTY_SHOW,
     PROPERTY_HIDE,
     CANDIDATE_CLICKED,
+    SET_CURSOR_OBJECT,
     LAST_SIGNAL,
 };
 
@@ -93,6 +94,9 @@ static void     ibus_engine_set_cursor_location
                                              gint                y,
                                              gint                w,
                                              gint                h);
+static void     ibus_engine_set_cursor_object
+                                            (IBusEngine         *engine,
+                                             IBusCursorLocation *cursor);
 static void     ibus_engine_set_capabilities
                                             (IBusEngine         *engine,
                                              guint               caps);
@@ -166,6 +170,7 @@ ibus_engine_class_init (IBusEngineClass *klass)
     klass->property_show        = ibus_engine_property_show;
     klass->property_hide        = ibus_engine_property_hide;
     klass->set_cursor_location  = ibus_engine_set_cursor_location;
+    klass->set_cursor_object    = ibus_engine_set_cursor_object;
     klass->set_capabilities     = ibus_engine_set_capabilities;
 
 
@@ -355,6 +360,29 @@ ibus_engine_class_init (IBusEngineClass *klass)
             G_TYPE_INT,
             G_TYPE_INT,
             G_TYPE_INT);
+
+    /**
+     * IBusEngine::set-cursor-object:
+     * @engine: An #IBusEngine.
+     * @cursor: An #IBusCursorLocation
+     *
+     * Emitted when the location of IME is set.
+     * Implement the member function set_cursor_object() in extended class to
+     * receive this signal.
+     *
+     * See also:  ibus_input_context_set_cursor_varargs().
+     * <note><para>Argument @user_data is ignored in this function.</para></note>
+     */
+    engine_signals[SET_CURSOR_OBJECT] =
+        g_signal_new (I_("set-cursor-object"),
+            G_TYPE_FROM_CLASS (gobject_class),
+            G_SIGNAL_RUN_LAST,
+            G_STRUCT_OFFSET (IBusEngineClass, set_cursor_object),
+            NULL, NULL,
+            ibus_marshal_VOID__OBJECT,
+            G_TYPE_NONE,
+            1,
+            IBUS_TYPE_CURSOR_LOCATION);
 
     /**
      * IBusEngine::set-capabilities:
@@ -851,6 +879,40 @@ ibus_engine_ibus_message (IBusEngine     *engine,
                 reply = ibus_message_new_method_return (message);
             }
         }
+        else if (g_strcmp0 (name, "SetCursorObject") == 0) {
+            IBusCursorLocation *cursor = NULL;
+
+            retval = ibus_message_get_args (message,
+                                            &error,
+                                            IBUS_TYPE_CURSOR_LOCATION, &cursor,
+                                            G_TYPE_INVALID);
+            if (!retval) {
+                reply = ibus_message_new_error_printf (message,
+                            DBUS_ERROR_INVALID_ARGS,
+                            "%s.%s: Can not match signature (v) of method",
+                            IBUS_INTERFACE_ENGINE,
+                            "SetCursorObject");
+                ibus_error_free (error);
+            }
+            else {
+                cursor = g_object_ref_sink (cursor);
+
+                engine->cursor_area.x = ibus_cursor_location_get_x (cursor);
+                engine->cursor_area.y = ibus_cursor_location_get_y (cursor);
+                engine->cursor_area.width =
+                        ibus_cursor_location_get_width (cursor);
+                engine->cursor_area.height =
+                        ibus_cursor_location_get_height (cursor);
+
+                g_signal_emit (engine,
+                               engine_signals[SET_CURSOR_OBJECT],
+                               0,
+                               cursor);
+
+                reply = ibus_message_new_method_return (message);
+                g_object_unref (cursor);
+            }
+        }
         else if (g_strcmp0 (name, "SetCapabilities") == 0) {
             guint caps;
 
@@ -938,6 +1000,13 @@ ibus_engine_set_cursor_location (IBusEngine *engine,
                                  gint        y,
                                  gint        w,
                                  gint        h)
+{
+    // g_debug ("set-cursor-location (%d, %d, %d, %d)", x, y, w, h);
+}
+
+static void
+ibus_engine_set_cursor_object (IBusEngine         *engine,
+                               IBusCursorLocation *cursor)
 {
     // g_debug ("set-cursor-location (%d, %d, %d, %d)", x, y, w, h);
 }

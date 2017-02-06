@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -212,13 +213,14 @@ bus_input_context_class_init (BusInputContextClass *klass)
             G_SIGNAL_RUN_LAST,
             0,
             NULL, NULL,
-            ibus_marshal_VOID__INT_INT_INT_INT,
+            ibus_marshal_VOID__INT_INT_INT_INT_OBJECT,
             G_TYPE_NONE,
-            4,
+            5,
             G_TYPE_INT,
             G_TYPE_INT,
             G_TYPE_INT,
-            G_TYPE_INT);
+            G_TYPE_INT,
+            IBUS_TYPE_CURSOR_LOCATION);
 
     context_signals[FOCUS_IN] =
         g_signal_new (I_("focus-in"),
@@ -515,6 +517,11 @@ bus_input_context_destroy (BusInputContext *context)
         context->client = NULL;
     }
 
+    if (context->cursor) {
+        g_object_unref (context->cursor);
+        context->cursor = NULL;
+    }
+
     IBUS_OBJECT_CLASS(bus_input_context_parent_class)->destroy (IBUS_OBJECT (context));
 }
 
@@ -546,6 +553,9 @@ _ibus_introspect (BusInputContext   *context,
         "      <arg name=\"y\" direction=\"in\" type=\"i\"/>\n"
         "      <arg name=\"w\" direction=\"in\" type=\"i\"/>\n"
         "      <arg name=\"h\" direction=\"in\" type=\"i\"/>\n"
+        "    </method>\n"
+        "    <method name=\"SetCursorObject\">\n"
+        "      <arg name=\"cursor\" direction=\"in\" type=\"v\"/>\n"
         "    </method>\n"
         "    <method name=\"FocusIn\"/>\n"
         "    <method name=\"FocusOut\"/>\n"
@@ -773,19 +783,76 @@ _ic_set_cursor_location (BusInputContext  *context,
     context->y = y;
     context->h = h;
     context->w = w;
+    if (context->cursor)
+        g_object_unref (context->cursor);
+    context->cursor = NULL;
 
     if (context->has_focus && context->enabled && context->engine) {
-        bus_engine_proxy_set_cursor_location (context->engine, x, y, w, h);
+        bus_engine_proxy_set_cursor_location (context->engine,
+                                              x, y, w, h, NULL);
     }
 
     if (context->capabilities & IBUS_CAP_FOCUS) {
         g_signal_emit (context,
                        context_signals[SET_CURSOR_LOCATION],
                        0,
-                       x,
-                       y,
-                       w,
-                       h);
+                       x, y, w, h,
+                       NULL);
+    }
+
+    reply = ibus_message_new_method_return (message);
+    return reply;
+}
+
+static IBusMessage *
+_ic_set_cursor_object (BusInputContext  *context,
+                       IBusMessage      *message,
+                       BusConnection    *connection)
+{
+    g_assert (BUS_IS_INPUT_CONTEXT (context));
+    g_assert (message != NULL);
+    g_assert (BUS_IS_CONNECTION (connection));
+
+    gboolean retval;
+    IBusCursorLocation *cursor = NULL;
+    IBusError *error = NULL;
+    IBusMessage *reply;
+    gint x, y, w, h;
+
+    retval = ibus_message_get_args (message, &error,
+                IBUS_TYPE_CURSOR_LOCATION, &cursor,
+                G_TYPE_INVALID);
+
+    if (!retval) {
+        reply = ibus_message_new_error (message,
+                                        error->name,
+                                        error->message);
+        ibus_error_free (error);
+        return reply;
+    }
+
+    context->x = x = ibus_cursor_location_get_x (cursor);
+    context->y = y = ibus_cursor_location_get_y (cursor);
+    context->w = w = ibus_cursor_location_get_width (cursor);
+    context->h = h = ibus_cursor_location_get_height (cursor);
+    if (context->cursor)
+        g_object_unref (context->cursor);
+    if (cursor)
+        context->cursor = g_object_ref_sink (cursor);
+    else
+        context->cursor = NULL;
+
+    if (context->has_focus && context->enabled && context->engine) {
+        bus_engine_proxy_set_cursor_location (context->engine,
+                                              x, y, w, h, cursor);
+    }
+
+    if (context->capabilities & IBUS_CAP_FOCUS) {
+        g_signal_emit (context,
+                       context_signals[SET_CURSOR_LOCATION],
+                       0,
+                       x, y, w, h,
+                       cursor);
     }
 
     reply = ibus_message_new_method_return (message);
@@ -1121,6 +1188,7 @@ bus_input_context_ibus_message (BusInputContext *context,
         /* IBus interface */
         { IBUS_INTERFACE_INPUT_CONTEXT, "ProcessKeyEvent",   _ic_process_key_event },
         { IBUS_INTERFACE_INPUT_CONTEXT, "SetCursorLocation", _ic_set_cursor_location },
+        { IBUS_INTERFACE_INPUT_CONTEXT, "SetCursorObject",   _ic_set_cursor_object },
         { IBUS_INTERFACE_INPUT_CONTEXT, "FocusIn",           _ic_focus_in },
         { IBUS_INTERFACE_INPUT_CONTEXT, "FocusOut",          _ic_focus_out },
         { IBUS_INTERFACE_INPUT_CONTEXT, "Reset",             _ic_reset },
@@ -1198,7 +1266,10 @@ bus_input_context_focus_in (BusInputContext *context)
         bus_engine_proxy_focus_in (context->engine);
         bus_engine_proxy_enable (context->engine);
         bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
-        bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);
+        bus_engine_proxy_set_cursor_location (context->engine,
+                                              context->x, context->y,
+                                              context->w, context->h,
+                                              context->cursor);
     }
 
     if (context->capabilities & IBUS_CAP_FOCUS) {
@@ -1904,7 +1975,10 @@ bus_input_context_enable (BusInputContext *context)
     bus_engine_proxy_enable (context->engine);
     bus_engine_proxy_focus_in (context->engine);
     bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
-    bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);
+    bus_engine_proxy_set_cursor_location (context->engine,
+                                          context->x, context->y,
+                                          context->w, context->h,
+                                          context->cursor);
 
     bus_input_context_send_signal (context,
                                    "Enabled",
@@ -2025,7 +2099,10 @@ bus_input_context_set_engine (BusInputContext *context,
             bus_engine_proxy_focus_in (context->engine);
             bus_engine_proxy_enable (context->engine);
             bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
-            bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);
+            bus_engine_proxy_set_cursor_location (context->engine,
+                                                  context->x, context->y,
+                                                  context->w, context->h,
+                                                  context->cursor);
         }
     }
     g_signal_emit (context,

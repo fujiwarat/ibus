@@ -3,7 +3,8 @@
 # ibus - The Input Bus
 #
 # Copyright(c) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
-# Copyright(c) 2007-2010 Red Hat, Inc.
+# Copyright(c) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+# Copyright(c) 2007-2017 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -119,8 +120,12 @@ class Panel(ibus.PanelBase):
         self.__config_load_show_im_name()
         # self.__bus.request_name(ibus.panel.IBUS_SERVICE_PANEL, 0)
 
-    def set_cursor_location(self, x, y, w, h):
-        self.__candidate_panel.set_cursor_location(x, y, w, h)
+    def set_cursor_object(self, cursor):
+        self.__candidate_panel.set_cursor_location(cursor.x,
+                                                   cursor.y,
+                                                   cursor.width,
+                                                   cursor.height,
+                                                   cursor.display_name)
 
     def update_preedit_text(self, text, cursor_pos, visible):
         self.__candidate_panel.update_preedit_text(text, cursor_pos, visible)

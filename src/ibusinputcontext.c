@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -27,8 +28,19 @@
 #include "ibuslookuptable.h"
 #include "ibusproplist.h"
 
+#define IBUS_CURSOR_LOCATION_GET_PRIVATE(o)  \
+   (G_TYPE_INSTANCE_GET_PRIVATE ((o), IBUS_TYPE_CURSOR_LOCATION, IBusCursorLocationPrivate))
 #define IBUS_INPUT_CONTEXT_GET_PRIVATE(o)  \
    (G_TYPE_INSTANCE_GET_PRIVATE ((o), IBUS_TYPE_INPUT_CONTEXT, IBusInputContextPrivate))
+
+enum {
+    PROP_0 = 0,
+    PROP_X,
+    PROP_Y,
+    PROP_WIDTH,
+    PROP_HEIGHT,
+    PROP_DISPLAY_NAME
+};
 
 enum {
     ENABLED,
@@ -56,6 +68,14 @@ enum {
 
 
 /* BusInputContextPriv */
+struct _IBusCursorLocationPrivate {
+    int    x;
+    int    y;
+    int    width;
+    int    height;
+    gchar *display_name;
+};
+
 struct _IBusInputContextPrivate {
     gboolean own;
 };
@@ -65,11 +85,344 @@ static guint            context_signals[LAST_SIGNAL] = { 0 };
 // static guint            context_signals[LAST_SIGNAL] = { 0 };
 
 /* functions prototype */
+static void     ibus_cursor_location_destroy    (IBusCursorLocation    *cursor);
+static void     ibus_cursor_location_set_property
+                                                (IBusCursorLocation    *desc,
+                                                 guint                  prop_id,
+                                                 const GValue          *value,
+                                                 GParamSpec            *pspec);
+static void     ibus_cursor_location_get_property
+                                                (IBusCursorLocation    *desc,
+                                                 guint                  prop_id,
+                                                 GValue                *value,
+                                                 GParamSpec            *pspec);
+static gboolean ibus_cursor_location_serialize  (IBusCursorLocation    *cursor,
+                                                 IBusMessageIter       *iter);
+static gboolean ibus_cursor_location_deserialize
+                                                (IBusCursorLocation    *cursor,
+                                                 IBusMessageIter       *iter);
+static gboolean ibus_cursor_location_copy       (IBusCursorLocation    *dest,
+                                                 const IBusCursorLocation
+                                                                       *src);
 static void     ibus_input_context_real_destroy (IBusInputContext       *context);
 static gboolean ibus_input_context_ibus_signal  (IBusProxy              *proxy,
                                                  DBusMessage            *message);
 
 G_DEFINE_TYPE (IBusInputContext, ibus_input_context, IBUS_TYPE_PROXY)
+G_DEFINE_TYPE (IBusCursorLocation, ibus_cursor_location, IBUS_TYPE_SERIALIZABLE)
+
+static void
+ibus_cursor_location_class_init (IBusCursorLocationClass *klass)
+{
+    GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+    IBusObjectClass *object_class = IBUS_OBJECT_CLASS (klass);
+    IBusSerializableClass *serializable_class = IBUS_SERIALIZABLE_CLASS (klass);
+
+    ibus_cursor_location_parent_class =
+            (IBusSerializableClass *) g_type_class_peek_parent (klass);
+
+    g_type_class_add_private (klass, sizeof (IBusCursorLocationPrivate));
+
+    object_class->destroy =
+            (IBusObjectDestroyFunc) ibus_cursor_location_destroy;
+
+    gobject_class->set_property =
+            (GObjectSetPropertyFunc) ibus_cursor_location_set_property;
+    gobject_class->get_property =
+            (GObjectGetPropertyFunc) ibus_cursor_location_get_property;
+    serializable_class->serialize   =
+            (IBusSerializableSerializeFunc) ibus_cursor_location_serialize;
+    serializable_class->deserialize =
+            (IBusSerializableDeserializeFunc) ibus_cursor_location_deserialize;
+    serializable_class->copy        =
+            (IBusSerializableCopyFunc) ibus_cursor_location_copy;
+
+    g_string_append (serializable_class->signature, "iiiis");
+
+    /* install properties */
+    /**
+     * IBusCursorLocation:x:
+     *
+     * X coordiante of the cursor location
+     */
+    g_object_class_install_property (gobject_class,
+                    PROP_X,
+                    g_param_spec_int ("x",
+                        "X coordinate",
+                        "X coordiante of the cursor location",
+                        G_MININT,
+                        G_MAXINT,
+                        0,
+                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+    /**
+     * IBusCursorLocation:y:
+     *
+     * Y coordiante of the cursor location
+     */
+    g_object_class_install_property (gobject_class,
+                    PROP_Y,
+                    g_param_spec_int ("y",
+                        "Y coordinate",
+                        "Y coordiante of the cursor location",
+                        G_MININT,
+                        G_MAXINT,
+                        0,
+                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+    /**
+     * IBusCursorLocation:width:
+     *
+     * The width of the cursor
+     */
+    g_object_class_install_property (gobject_class,
+                    PROP_WIDTH,
+                    g_param_spec_int ("width",
+                        "cursor width",
+                        "The width of the cursor",
+                        G_MININT,
+                        G_MAXINT,
+                        0,
+                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+    /**
+     * IBusCursorLocation:height:
+     *
+     * The width of the cursor
+     */
+    g_object_class_install_property (gobject_class,
+                    PROP_HEIGHT,
+                    g_param_spec_int ("height",
+                        "cursor height",
+                        "The height of the cursor",
+                        G_MININT,
+                        G_MAXINT,
+                        0,
+                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+    /**
+     * IBusCursorLocation:display_name:
+     *
+     * The value of $DISPLAY
+     */
+    g_object_class_install_property (gobject_class,
+                    PROP_DISPLAY_NAME,
+                    g_param_spec_string ("display-name",
+                        "display name",
+                        "The value of $DISPLAY",
+                        NULL,
+                        G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+}
+
+static void
+ibus_cursor_location_init (IBusCursorLocation *cursor)
+{
+    cursor->priv = IBUS_CURSOR_LOCATION_GET_PRIVATE (cursor);
+}
+
+static void
+ibus_cursor_location_destroy (IBusCursorLocation *cursor)
+{
+    g_free (cursor->priv->display_name);
+    cursor->priv->display_name = NULL;
+
+    IBUS_OBJECT_CLASS (ibus_cursor_location_parent_class)->
+            destroy ((IBusObject *)cursor);
+}
+
+static void
+ibus_cursor_location_set_property (IBusCursorLocation *cursor,
+                                   guint               prop_id,
+                                   const GValue       *value,
+                                   GParamSpec         *pspec)
+{
+    switch (prop_id) {
+    case PROP_X:
+        cursor->priv->x = g_value_get_int (value);
+        break;
+    case PROP_Y:
+        cursor->priv->y = g_value_get_int (value);
+        break;
+    case PROP_WIDTH:
+        cursor->priv->width = g_value_get_int (value);
+        break;
+    case PROP_HEIGHT:
+        cursor->priv->height= g_value_get_int (value);
+        break;
+    case PROP_DISPLAY_NAME:
+        g_assert (cursor->priv->display_name == NULL);
+        cursor->priv->display_name = g_value_dup_string (value);
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (cursor, prop_id, pspec);
+    }
+}
+
+static void
+ibus_cursor_location_get_property (IBusCursorLocation *cursor,
+                                   guint               prop_id,
+                                   GValue             *value,
+                                   GParamSpec         *pspec)
+{
+    switch (prop_id) {
+    case PROP_X:
+        g_value_set_int (value, ibus_cursor_location_get_x (cursor));
+        break;
+    case PROP_Y:
+        g_value_set_int (value, ibus_cursor_location_get_y (cursor));
+        break;
+    case PROP_WIDTH:
+        g_value_set_int (value, ibus_cursor_location_get_width (cursor));
+        break;
+    case PROP_HEIGHT:
+        g_value_set_int (value, ibus_cursor_location_get_height (cursor));
+        break;
+    case PROP_DISPLAY_NAME:
+        g_value_set_string (value,
+                            ibus_cursor_location_get_display_name (cursor));
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (cursor, prop_id, pspec);
+    }
+}
+
+
+static gboolean
+ibus_cursor_location_serialize (IBusCursorLocation *cursor,
+                                IBusMessageIter    *iter)
+{
+    gboolean retval;
+    IBusCursorLocationPrivate *priv;
+
+    retval = IBUS_SERIALIZABLE_CLASS (ibus_cursor_location_parent_class)->
+            serialize ((IBusSerializable *)cursor, iter);
+    g_return_val_if_fail (retval, FALSE);
+
+    priv = cursor->priv;
+    retval = ibus_message_iter_append (iter, G_TYPE_INT, &priv->x);
+    g_return_val_if_fail (retval, FALSE);
+    retval = ibus_message_iter_append (iter, G_TYPE_INT, &priv->y);
+    g_return_val_if_fail (retval, FALSE);
+    retval = ibus_message_iter_append (iter, G_TYPE_INT, &priv->width);
+    g_return_val_if_fail (retval, FALSE);
+    retval = ibus_message_iter_append (iter, G_TYPE_INT, &priv->height);
+    g_return_val_if_fail (retval, FALSE);
+    retval = ibus_message_iter_append (iter, G_TYPE_STRING,
+                                       &priv->display_name);
+    g_return_val_if_fail (retval, FALSE);
+
+    return TRUE;
+}
+
+static gboolean
+ibus_cursor_location_deserialize (IBusCursorLocation *cursor,
+                                  IBusMessageIter    *iter)
+{
+    gboolean retval;
+    IBusCursorLocationPrivate *priv;
+    gchar *str;
+
+    retval = IBUS_SERIALIZABLE_CLASS (ibus_cursor_location_parent_class)->
+            deserialize ((IBusSerializable *)cursor, iter);
+    g_return_val_if_fail (retval, FALSE);
+
+    priv = cursor->priv;
+    retval = ibus_message_iter_get (iter, G_TYPE_INT, &priv->x);
+    g_return_val_if_fail (retval, FALSE);
+    ibus_message_iter_next (iter);
+    retval = ibus_message_iter_get (iter, G_TYPE_INT, &priv->y);
+    g_return_val_if_fail (retval, FALSE);
+    ibus_message_iter_next (iter);
+    retval = ibus_message_iter_get (iter, G_TYPE_INT, &priv->width);
+    g_return_val_if_fail (retval, FALSE);
+    ibus_message_iter_next (iter);
+    retval = ibus_message_iter_get (iter, G_TYPE_INT, &priv->height);
+    g_return_val_if_fail (retval, FALSE);
+    ibus_message_iter_next (iter);
+    retval = ibus_message_iter_get (iter, G_TYPE_STRING, &str);
+    g_return_val_if_fail (retval, FALSE);
+    ibus_message_iter_next (iter);
+
+    g_free (priv->display_name);
+    priv->display_name = g_strdup (str);
+
+    return TRUE;
+}
+
+static gboolean
+ibus_cursor_location_copy (IBusCursorLocation       *dest,
+                           const IBusCursorLocation *src)
+{
+    gboolean retval;
+    IBusCursorLocationPrivate *priv_dest;
+    IBusCursorLocationPrivate *priv_src;
+
+    retval = IBUS_SERIALIZABLE_CLASS (ibus_cursor_location_parent_class)->
+            copy ( (IBusSerializable *)dest,
+                   (IBusSerializable *)src);
+    g_return_val_if_fail (retval, FALSE);
+
+    g_return_val_if_fail (IBUS_IS_CURSOR_LOCATION (dest), FALSE);
+    g_return_val_if_fail (IBUS_IS_CURSOR_LOCATION (src), FALSE);
+    priv_dest = dest->priv;
+    priv_src = src->priv;
+
+    priv_dest->x = priv_src->x;
+    priv_dest->y = priv_src->y;
+    priv_dest->width = priv_src->width;
+    priv_dest->height = priv_src->height;
+    priv_dest->display_name = g_strdup (priv_src->display_name);
+    return TRUE;
+}
+
+IBusCursorLocation *
+ibus_cursor_location_new (const gchar *first_property_name,
+                          ...)
+{
+    va_list var_args;
+    IBusCursorLocation *cursor;
+
+    g_assert (first_property_name);
+
+    va_start (var_args, first_property_name);
+    cursor = (IBusCursorLocation *) g_object_new_valist (IBUS_TYPE_CURSOR_LOCATION,
+                                                         first_property_name,
+                                                         var_args);
+    va_end (var_args);
+
+    return cursor;
+}
+
+int
+ibus_cursor_location_get_x (IBusCursorLocation *cursor)
+{
+    g_return_val_if_fail (IBUS_IS_CURSOR_LOCATION (cursor), 0);
+    return cursor->priv->x;
+}
+
+int
+ibus_cursor_location_get_y (IBusCursorLocation *cursor)
+{
+    g_return_val_if_fail (IBUS_IS_CURSOR_LOCATION (cursor), 0);
+    return cursor->priv->y;
+}
+
+int
+ibus_cursor_location_get_width (IBusCursorLocation *cursor)
+{
+    g_return_val_if_fail (IBUS_IS_CURSOR_LOCATION (cursor), 0);
+    return cursor->priv->width;
+}
+
+int
+ibus_cursor_location_get_height (IBusCursorLocation *cursor)
+{
+    g_return_val_if_fail (IBUS_IS_CURSOR_LOCATION (cursor), 0);
+    return cursor->priv->height;
+}
+
+const gchar *
+ibus_cursor_location_get_display_name (IBusCursorLocation *cursor)
+{
+    g_return_val_if_fail (IBUS_IS_CURSOR_LOCATION (cursor), NULL);
+    return cursor->priv->display_name;
+}
 
 IBusInputContext *
 ibus_input_context_new (const gchar     *path,
@@ -956,6 +1309,90 @@ ibus_input_context_process_key_event_async_finish (IBusInputContext  *context,
     return processed;
 }
 
+#if 0
+static GVariant *
+cursor_valist_serialize (const gchar     *first_property_name,
+                         va_list          args)
+{
+    GVariantBuilder builder;
+    const gchar *name;
+
+    g_variant_builder_init (&builder, G_VARIANT_TYPE_TUPLE);
+
+    name = first_property_name;
+
+    do {
+        if (!g_strcmp0 (name, "x")) {
+            int x = va_arg (args, int);
+            g_variant_builder_add (&builder, "u", x);
+        }
+        else if (!g_strcmp0 (name, "y")) {
+            int y = va_arg (args, int);
+            g_variant_builder_add (&builder, "u", y);
+        }
+        else if (!g_strcmp0 (name, "width")) {
+            int w = va_arg (args, int);
+            g_variant_builder_add (&builder, "u", w);
+        }
+        else if (!g_strcmp0 (name, "height")) {
+            int h = va_arg (args, int);
+            g_variant_builder_add (&builder, "u", h);
+        }
+        else if (!g_strcmp0 (name, "display_name")) {
+            const gchar *display_name = va_arg (args, const gchar *);
+            g_variant_builder_add (&builder, "s", display_name);
+        }
+        else {
+            g_warning ("cursor_valist_serialize() got a invalid argument: %s",
+                       name);
+        }
+    } while ((name = va_arg (args, const gchar *)));
+
+    return g_variant_builder_end (&builder);
+}
+#endif
+
+void
+ibus_input_context_set_cursor_varargs (IBusInputContext *context,
+                                       const gchar      *first_property_name,
+                                       ...)
+{
+    IBusMessage *message;
+    IBusCursorLocation *cursor = NULL;
+    va_list var_args;
+    gboolean retval = FALSE;
+
+    g_assert (first_property_name);
+
+    message = ibus_proxy_create_method ((IBusProxy *) context,
+                                        "SetCursorObject");
+
+    va_start (var_args, first_property_name);
+
+    cursor = (IBusCursorLocation *) g_object_new_valist (
+            IBUS_TYPE_CURSOR_LOCATION,
+            first_property_name,
+            var_args);
+
+    va_end (var_args);
+
+    if (cursor) {
+        retval = ibus_message_append_args (message,
+                                           IBUS_TYPE_CURSOR_LOCATION, &cursor,
+                                           G_TYPE_INVALID);
+    }
+
+    if (!retval) {
+        ibus_message_unref (message);
+        if (cursor)
+            g_object_unref (cursor);
+        g_return_if_reached ();
+    }
+
+    ibus_proxy_send ((IBusProxy *) context, message);
+    ibus_message_unref (message);
+}
+
 void
 ibus_input_context_set_cursor_location (IBusInputContext *context,
                                         gint32            x,
@@ -1123,4 +1560,3 @@ DEFINE_FUNC(enable, Enable);
 DEFINE_FUNC(disable, Disable);
 
 #undef DEFINE_FUNC
-

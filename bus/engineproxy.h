@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -59,6 +60,7 @@ struct _BusEngineProxy {
     gint y;
     gint w;
     gint h;
+    gchar *display_name;
 
     IBusEngineDesc *desc;
     IBusKeymap     *keymap;
@@ -88,7 +90,9 @@ void             bus_engine_proxy_set_cursor_location
                                                      gint            x,
                                                      gint            y,
                                                      gint            w,
-                                                     gint            h);
+                                                     gint            h,
+                                                     IBusCursorLocation
+                                                                    *cursor);
 void             bus_engine_proxy_focus_in          (BusEngineProxy *engine);
 void             bus_engine_proxy_focus_out         (BusEngineProxy *engine);
 void             bus_engine_proxy_reset             (BusEngineProxy *engine);

@@ -66,7 +66,6 @@ struct _IBusIMContext {
     gboolean         has_focus;
 
     gint             caps;
-
 };
 
 struct _IBusIMContextClass {
@@ -709,6 +708,9 @@ _set_cursor_location_internal (GtkIMContext *context)
 {
     IBusIMContext *ibusimcontext = IBUS_IM_CONTEXT (context);
     GdkRectangle area;
+    GdkDisplay *display = NULL;
+    Display *xdisplay = NULL;
+    gchar *display_name = NULL;
     gint x, y;
 
     if(ibusimcontext->client_window == NULL || ibusimcontext->ibuscontext == NULL) {
@@ -731,11 +733,24 @@ _set_cursor_location_internal (GtkIMContext *context)
     gdk_window_get_origin (ibusimcontext->client_window, &x, &y);
     area.x += x;
     area.y += y;
-    ibus_input_context_set_cursor_location (ibusimcontext->ibuscontext,
-                                            area.x,
-                                            area.y,
-                                            area.width,
-                                            area.height);
+    display = gdk_window_get_display (ibusimcontext->client_window);
+#if GTK_CHECK_VERSION (3, 0, 0)
+    if (GDK_IS_X11_DISPLAY (display)) {
+        xdisplay = gdk_x11_display_get_xdisplay (GDK_X11_DISPLAY (display));
+        display_name = g_strdup (DisplayString (xdisplay));
+    }
+#else
+    xdisplay = GDK_DISPLAY_XDISPLAY (display);
+    display_name = g_strdup (DisplayString (xdisplay));
+#endif
+    ibus_input_context_set_cursor_varargs (ibusimcontext->ibuscontext,
+                                           "x",  area.x,
+                                           "y",  area.y,
+                                           "width",  area.width,
+                                           "height",  area.height,
+                                           "display_name",  display_name,
+                                           NULL);
+    g_free (display_name);
 }
 
 static void

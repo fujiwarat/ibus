@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -297,12 +298,16 @@ failed:
 
 
 
+/* Send both "SetCursorLocation" and "SetCursorObject" signal for the
+ * back and forward compatibilities.
+ */
 void
-bus_panel_proxy_set_cursor_location (BusPanelProxy *panel,
-                                     gint           x,
-                                     gint           y,
-                                     gint           w,
-                                     gint           h)
+bus_panel_proxy_set_cursor_location (BusPanelProxy      *panel,
+                                     gint                x,
+                                     gint                y,
+                                     gint                w,
+                                     gint                h,
+                                     IBusCursorLocation *cursor)
 {
     g_assert (BUS_IS_PANEL_PROXY (panel));
 
@@ -313,6 +318,22 @@ bus_panel_proxy_set_cursor_location (BusPanelProxy *panel,
                      G_TYPE_INT, &w,
                      G_TYPE_INT, &h,
                      G_TYPE_INVALID);
+
+    if (cursor == NULL) {
+        cursor = ibus_cursor_location_new ("x", x, "y", y,
+                                           "width", w, "height", h,
+                                           "display_name", "default",
+                                           NULL);
+    } else {
+        cursor = g_object_ref (cursor);
+    }
+
+    ibus_proxy_call ((IBusProxy *) panel,
+                     "SetCursorObject",
+                     IBUS_TYPE_CURSOR_LOCATION, &cursor,
+                     G_TYPE_INVALID);
+
+    g_object_unref (cursor);
 }
 
 void
@@ -458,19 +479,20 @@ DEFINE_FUNCTION (StateChanged, state_changed)
 #undef DEFINE_FUNCTION
 
 static void
-_context_set_cursor_location_cb (BusInputContext *context,
-                                 gint             x,
-                                 gint             y,
-                                 gint             w,
-                                 gint             h,
-                                 BusPanelProxy   *panel)
+_context_set_cursor_location_cb (BusInputContext    *context,
+                                 gint                x,
+                                 gint                y,
+                                 gint                w,
+                                 gint                h,
+                                 IBusCursorLocation *cursor,
+                                 BusPanelProxy      *panel)
 {
     g_assert (BUS_IS_INPUT_CONTEXT (context));
     g_assert (BUS_IS_PANEL_PROXY (panel));
 
     g_return_if_fail (panel->focused_context == context);
 
-    bus_panel_proxy_set_cursor_location (panel, x, y, w, h);
+    bus_panel_proxy_set_cursor_location (panel, x, y, w, h, cursor);
 }
 
 static void

@@ -113,6 +113,17 @@ gboolean         ibus_proxy_send            (IBusProxy          *proxy,
                                              IBusMessage        *message);
 
 /**
+ * ibus_proxy_create_method:
+ * @proxy: An IBusProxy.
+ * @method: A method of the #IBusMessage
+ * @returns: #IBusMessage
+ *
+ * Create an #IBusMessage with @method.
+ */
+IBusMessage *    ibus_proxy_create_method   (IBusProxy          *proxy,
+                                             const gchar        *method);
+
+/**
  * ibus_proxy_call:
  * @proxy: An IBusProxy.
  * @method: The method to be called.

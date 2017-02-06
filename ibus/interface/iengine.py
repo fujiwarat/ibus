@@ -3,6 +3,7 @@
 # ibus - The Input Bus
 #
 # Copyright(c) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
+# Copyright(c) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
 # Copyright(c) 2007-2010 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
@@ -49,6 +50,9 @@ class IEngine(dbus.service.Object):
 
     @method(in_signature="iiii")
     def SetCursorLocation(self, x, y, w, h): pass
+
+    @method(in_signature="v")
+    def SetCursorObject(self, cursor): pass
 
     @method(in_signature="u")
     def SetCapabilities(self, cap): pass

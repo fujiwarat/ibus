@@ -589,29 +589,48 @@ ibus_proxy_send (IBusProxy      *proxy,
     return ibus_connection_send (priv->connection, message);
 }
 
+IBusMessage *
+ibus_proxy_create_method (IBusProxy      *proxy,
+                          const gchar    *method)
+{
+    IBusProxyPrivate *priv;
+    IBusMessage *message = NULL;
+
+    g_assert (IBUS_IS_PROXY (proxy));
+
+    priv = IBUS_PROXY_GET_PRIVATE (proxy);
+
+    message = ibus_message_new_method_call (priv->name,
+                                            priv->path,
+                                            priv->interface,
+                                            method);
+
+    return message;
+}
+
 gboolean
 ibus_proxy_call (IBusProxy      *proxy,
                  const gchar    *method,
                  GType           first_arg_type,
                  ...)
 {
-    g_assert (IBUS_IS_PROXY (proxy));
-    g_assert (method != NULL);
-
     va_list args;
     gboolean retval;
     DBusMessage *message;
 
     IBusProxyPrivate *priv;
+
+    g_assert (IBUS_IS_PROXY (proxy));
+    g_assert (method != NULL);
+
     priv = IBUS_PROXY_GET_PRIVATE (proxy);
 
     g_return_val_if_fail (priv->connection, FALSE);
-    g_return_val_if_fail (ibus_connection_is_connected (priv->connection), FALSE);
+    g_return_val_if_fail (ibus_connection_is_connected (priv->connection),
+                          FALSE);
 
-    message = ibus_message_new_method_call (priv->name,
-                                            priv->path,
-                                            priv->interface,
-                                            method);
+    message = ibus_proxy_create_method (proxy, method);
+
     va_start (args, first_arg_type);
     retval = ibus_message_append_args_valist (message,
                                               first_arg_type,

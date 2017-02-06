@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -335,6 +336,9 @@ bus_engine_proxy_real_destroy (BusEngineProxy *engine)
         engine->keymap = NULL;
     }
 
+    g_free (engine->display_name);
+    engine->display_name = NULL;
+
     IBUS_OBJECT_CLASS(bus_engine_proxy_parent_class)->destroy (IBUS_OBJECT (engine));
 }
 
@@ -653,19 +657,41 @@ bus_engine_proxy_process_key_event (BusEngineProxy *engine,
 }
 
 void
-bus_engine_proxy_set_cursor_location (BusEngineProxy *engine,
-                                      gint            x,
-                                      gint            y,
-                                      gint            w,
-                                      gint            h)
+bus_engine_proxy_set_cursor_location (BusEngineProxy     *engine,
+                                      gint                x,
+                                      gint                y,
+                                      gint                w,
+                                      gint                h,
+                                      IBusCursorLocation *cursor)
 {
+    const gchar *display_name = NULL;
     g_assert (BUS_IS_ENGINE_PROXY (engine));
 
-    if (engine->x != x || engine->y != y || engine->w != w || engine->h != h) {
+    if (cursor) {
+        display_name = ibus_cursor_location_get_display_name (cursor);
+        cursor = g_object_ref (cursor);
+    } else {
+        display_name = "default";
+        cursor = ibus_cursor_location_new ("x", x, "y", y,
+                                           "width", w, "height", h,
+                                           "display_name", display_name,
+                                           NULL);
+    }
+
+    if (engine->x != x || engine->y != y || engine->w != w || engine->h != h ||
+        g_strcmp0 (engine->display_name, display_name) != 0) {
         engine->x = x;
         engine->y = y;
         engine->w = w;
         engine->h = h;
+        g_free (engine->display_name);
+        engine->display_name = g_strdup (display_name);
+
+        ibus_proxy_call ((IBusProxy *) engine,
+                         "SetCursorObject",
+                         IBUS_TYPE_CURSOR_LOCATION, &cursor,
+                         G_TYPE_INVALID);
+
         ibus_proxy_call ((IBusProxy *) engine,
                          "SetCursorLocation",
                          G_TYPE_INT, &x,
@@ -674,6 +700,8 @@ bus_engine_proxy_set_cursor_location (BusEngineProxy *engine,
                          G_TYPE_INT, &h,
                          G_TYPE_INVALID);
     }
+
+    g_object_unref (cursor);
 }
 
 void

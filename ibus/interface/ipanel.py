@@ -3,7 +3,8 @@
 # ibus - The Input Bus
 #
 # Copyright(c) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
-# Copyright(c) 2007-2010 Red Hat, Inc.
+# Copyright(c) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+# Copyright(c) 2007-2017 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -44,6 +45,9 @@ class IPanel(dbus.service.Object):
                             **args)
     @method(in_signature="iiii")
     def SetCursorLocation(self, x, y, w, h): pass
+
+    @method(in_signature="v")
+    def SetCursorObject(self, cursor): pass
 
     @method(in_signature="vub")
     def UpdatePreeditText(self, text, cursor_pos, visible): pass

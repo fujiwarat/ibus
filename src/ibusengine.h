@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -33,6 +34,7 @@
 #ifndef __IBUS_ENGINE_H_
 #define __IBUS_ENGINE_H_
 
+#include "ibusinputcontext.h"
 #include "ibusservice.h"
 #include "ibusattribute.h"
 #include "ibuslookuptable.h"
@@ -124,10 +126,13 @@ struct _IBusEngineClass {
                                      guint           index,
                                      guint           button,
                                      guint           state);
+    void        (* set_cursor_object)
+                                    (IBusEngine     *engine,
+                                     IBusCursorLocation *cursor);
 
     /*< private >*/
     /* padding */
-    gpointer pdummy[8];
+    gpointer pdummy[7];
 };
 
 GType        ibus_engine_get_type       (void);
