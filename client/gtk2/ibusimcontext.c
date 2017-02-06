@@ -1104,8 +1104,16 @@ _ibus_context_disabled_cb (IBusInputContext *ibuscontext,
     g_free (ibusimcontext->preedit_string);
     ibusimcontext->preedit_string = NULL;
 
+    if (G_OBJECT (ibusimcontext)->ref_count == 0)
+        return;
+    /* rhbz:1245288 gtk_im_multicontext_get_slave() unref ibusimcontext
+     * if gtk-im-module is changed.
+     */
+    g_object_ref (ibusimcontext);
     g_signal_emit (ibusimcontext, _signal_preedit_changed_id, 0);
     g_signal_emit (ibusimcontext, _signal_preedit_end_id, 0);
+    if (G_OBJECT (ibusimcontext)->ref_count > 1)
+        g_object_unref (ibusimcontext);
 }
 
 static void
