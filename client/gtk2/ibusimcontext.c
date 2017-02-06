@@ -85,6 +85,8 @@ static const gchar *_no_snooper_apps = NO_SNOOPER_APPS;
 static gboolean _use_key_snooper = ENABLE_SNOOPER;
 static guint    _key_snooper_id = 0;
 
+static gboolean _use_sync_mode = FALSE;
+
 static GtkIMContext *_focus_im_context = NULL;
 static IBusInputContext *_fake_context = NULL;
 static GdkWindow *_input_window = NULL;
@@ -206,6 +208,73 @@ ibus_im_context_new (void)
     return IBUS_IM_CONTEXT (obj);
 }
 
+static void
+_process_key_event_done (IBusInputContext *context,
+                         IBusPendingCall  *pending,
+                         gpointer          user_data)
+{
+    GdkEventKey *event = (GdkEventKey *) user_data;
+
+    IBusError *error = NULL;
+    gboolean retval = ibus_input_context_process_key_event_async_finish (
+            context,
+            pending,
+            &error);
+
+    if (error != NULL) {
+        g_warning ("Process Key Event failed: %s %s.",
+                   error->name, error->message);
+        ibus_error_free (error);
+    }
+
+    if (retval == FALSE) {
+        event->state |= IBUS_IGNORED_MASK;
+        gdk_event_put ((GdkEvent *)event);
+    }
+    gdk_event_free ((GdkEvent *)event);
+}
+
+static gboolean
+_process_key_event (IBusInputContext *context,
+                    GdkEventKey      *event)
+{
+    guint state = event->state;
+    gboolean retval = FALSE;
+
+    if (event->type == GDK_KEY_RELEASE) {
+        state |= IBUS_RELEASE_MASK;
+    }
+
+    if (_use_sync_mode) {
+        retval = ibus_input_context_process_key_event (context,
+            event->keyval,
+            event->hardware_keycode - 8,
+            state);
+    }
+    else {
+        ibus_input_context_process_key_event_async (context,
+            event->keyval,
+            event->hardware_keycode - 8,
+            state,
+            -1,
+            NULL,
+            _process_key_event_done,
+            gdk_event_copy ((GdkEvent *) event));
+
+        retval = TRUE;
+    }
+
+    if (retval) {
+        event->state |= IBUS_HANDLED_MASK;
+    }
+    else {
+        event->state |= IBUS_IGNORED_MASK;
+    }
+
+    return retval;
+}
+
+
 static gint
 _key_snooper_cb (GtkWidget   *widget,
                  GdkEventKey *event,
@@ -245,33 +314,30 @@ _key_snooper_cb (GtkWidget   *widget,
         _input_window = event->window;
     }
 
-    switch (event->type) {
-    case GDK_KEY_RELEASE:
-        retval = ibus_input_context_process_key_event (ibuscontext,
-                                                       event->keyval,
-                                                       event->hardware_keycode - 8,
-                                                       event->state | IBUS_RELEASE_MASK);
-        break;
-    case GDK_KEY_PRESS:
-        retval = ibus_input_context_process_key_event (ibuscontext,
-                                                       event->keyval,
-                                                       event->hardware_keycode - 8,
-                                                       event->state);
-        break;
-    default:
-        retval = FALSE;
-        break;
-    }
 
-    if (retval) {
-        event->state |= IBUS_HANDLED_MASK;
-    }
-    else {
-        event->state |= IBUS_IGNORED_MASK;
-    }
+    retval = _process_key_event (ibusimcontext->ibuscontext, event);
 
     return retval;
 }
+
+static gboolean
+_get_boolean_env(const gchar *name,
+                 gboolean     defval)
+{
+    const gchar *value = g_getenv (name);
+
+    if (value == NULL)
+      return defval;
+
+    if (g_strcmp0 (value, "") == 0 ||
+        g_strcmp0 (value, "0") == 0 ||
+        g_strcmp0 (value, "false") == 0 ||
+        g_strcmp0 (value, "False") == 0 ||
+        g_strcmp0 (value, "FALSE") == 0)
+      return FALSE;
+
+    return TRUE;
+
 
 static void
 ibus_im_context_class_init     (IBusIMContextClass *klass)
@@ -364,6 +430,8 @@ ibus_im_context_class_init     (IBusIMContextClass *klass)
         g_signal_connect (_bus, "connected", G_CALLBACK (_bus_connected_cb), NULL);
     }
 
+
+    _use_sync_mode = _get_boolean_env ("IBUS_ENABLE_SYNC_MODE", TRUE);
 
     /* always install snooper */
     if (_key_snooper_id == 0)
@@ -476,7 +544,6 @@ ibus_im_context_filter_keypress (GtkIMContext *context,
         /* If context does not have focus, ibus will process key event in sync mode.
          * It is a workaround for increase search in treeview.
          */
-        gboolean retval = FALSE;
 
         if (event->state & IBUS_HANDLED_MASK)
             return TRUE;
@@ -488,29 +555,10 @@ ibus_im_context_filter_keypress (GtkIMContext *context,
         if (ibusimcontext->client_window == NULL && event->window != NULL)
             gtk_im_context_set_client_window ((GtkIMContext *)ibusimcontext, event->window);
 
-        switch (event->type) {
-        case GDK_KEY_RELEASE:
-            retval = ibus_input_context_process_key_event (ibusimcontext->ibuscontext,
-                                                           event->keyval,
-                                                           event->hardware_keycode - 8,
-                                                           event->state | IBUS_RELEASE_MASK);
-            break;
-        case GDK_KEY_PRESS:
-            retval = ibus_input_context_process_key_event (ibusimcontext->ibuscontext,
-                                                           event->keyval,
-                                                           event->hardware_keycode - 8,
-                                                           event->state);
-            break;
-        default:
-            retval = FALSE;
-        }
-
-        if (retval) {
-            event->state |= IBUS_HANDLED_MASK;
+        if (_process_key_event (ibusimcontext->ibuscontext, event)) {
             return TRUE;
         }
         else {
-            event->state |= IBUS_IGNORED_MASK;
             return gtk_im_context_filter_keypress (ibusimcontext->slave, event);
         }
     }

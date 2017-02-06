@@ -79,6 +79,18 @@ struct _IBusInputContextClass {
     gpointer pdummy[24];
 };
 
+/**
+ * IBusInputContextNotifyFunction:
+ * @context: An IBusInputContext.
+ * @pending: An IBusPendingCall.
+ * @user_data: User data for the callback function.
+ *
+ * Callback prototype of pending call notify function.
+ */
+typedef void (* IBusInputContextNotifyFunction) (IBusInputContext *context,
+                                                 IBusPendingCall  *pending,
+                                                 gpointer          user_data);
+
 GType        ibus_input_context_get_type    (void);
 
 /**
@@ -139,6 +151,52 @@ gboolean     ibus_input_context_process_key_event
                                              guint32             keyval,
                                              guint32             keycode,
                                              guint32             state);
+
+/**
+ * ibus_input_context_process_key_event_async:
+ * @context: An IBusInputContext.
+ * @keyval: Key symbol of a key event.
+ * @keycode: Keycode of a key event.
+ * @state: Key modifier flags.
+ * @timeout_msec: The timeout in milliseconds or -1 to use the default timeout.
+ * @free_user_data: A GDestroyNotifyor NULL.
+ * @callback: An IBusInputContextNotifyFunction to call when the request is
+ *      satisfied or NULL
+ *      if you don't care about the result of the method invocation.
+ * @user_data: The data to pass to callback.
+ *
+ * Pass the key event to input method engine with async.
+ *
+ * see_also: #IBusEngine::process-key-event
+ */
+void        ibus_input_context_process_key_event_async
+                                            (IBusInputContext   *context,
+                                             guint32             keyval,
+                                             guint32             keycode,
+                                             guint32             state,
+                                             gint                timeout_msec,
+                                             GDestroyNotify
+                                                                free_user_data,
+                                             IBusInputContextNotifyFunction
+                                                                 callback,
+                                             gpointer            user_data);
+
+/**
+ * ibus_input_context_process_key_event_async_finish:
+ * @context: An IBusInputContext.
+ * @res: A IBusPendingCall obtained from the IBusInputContextNotifyFunction
+ *      passed to ibus_input_context_process_key_event_async().
+ * @error: Return location for error or NULL.
+ * @returns: %TRUE if the key event is processed;
+ *      %FALSE otherwise or some errors happen and the @error will be set.
+ *
+ * Finishes an operation started with
+ * ibus_input_context_process_key_event_async().
+ */
+gboolean     ibus_input_context_process_key_event_async_finish
+                                            (IBusInputContext   *context,
+                                             IBusPendingCall    *pending,
+                                             IBusError        **error);
 
 /**
  * ibus_input_context_set_cursor_location:

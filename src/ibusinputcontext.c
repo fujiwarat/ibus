@@ -846,6 +846,116 @@ ibus_input_context_process_key_event (IBusInputContext *context,
     return TRUE;
 }
 
+typedef struct {
+    IBusInputContext                   *context;
+    IBusInputContextNotifyFunction      callback;
+    gpointer                            user_data;
+} IBusPendingCallNotifyData;
+
+static void
+_process_key_event_notify (IBusPendingCall *pending, gpointer user_data)
+{
+    IBusPendingCallNotifyData *data = (IBusPendingCallNotifyData *) user_data;
+
+    data->callback (data->context, pending, data->user_data);
+
+    g_object_unref (data->context);
+    g_slice_free (IBusPendingCallNotifyData, data);
+}
+
+void
+ibus_input_context_process_key_event_async (IBusInputContext   *context,
+                                            guint32             keyval,
+                                            guint32             keycode,
+                                            guint32             state,
+                                            gint                timeout_msec,
+                                            GDestroyNotify      free_user_data,
+                                            IBusInputContextNotifyFunction
+                                                                callback,
+                                            gpointer            user_data)
+{
+    IBusPendingCall *pending = NULL;
+    IBusError *error = NULL;
+    gboolean retval;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT (context));
+
+    if (state & IBUS_HANDLED_MASK)
+        return;
+
+    if (state & IBUS_IGNORED_MASK)
+        return;
+
+    retval = ibus_proxy_call_with_reply ((IBusProxy *) context,
+                                         "ProcessKeyEvent",
+                                         &pending,
+                                         -1,
+                                         &error,
+                                         G_TYPE_UINT, &keyval,
+                                         G_TYPE_UINT, &keycode,
+                                         G_TYPE_UINT, &state,
+                                         G_TYPE_INVALID);
+    if (!retval) {
+        g_debug ("%s: %s", error->name, error->message);
+        ibus_error_free (error);
+        return;
+    }
+
+    IBusPendingCallNotifyData *data = g_slice_new0 (IBusPendingCallNotifyData);
+    data->context = g_object_ref_sink (context);
+    data->callback= callback;
+    data->user_data = user_data;
+
+    ibus_pending_call_set_notify (pending,
+                                  _process_key_event_notify,
+                                  data,
+                                  free_user_data);
+}
+
+gboolean
+ibus_input_context_process_key_event_async_finish (IBusInputContext  *context,
+                                                   IBusPendingCall   *pending,
+                                                   IBusError        **error)
+{
+    IBusMessage *reply_message;
+    gboolean processed = TRUE;
+    IBusError *_error = NULL;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT (context));
+    g_assert (pending != NULL);
+    g_assert (error == NULL || *error == NULL);
+
+    reply_message = ibus_pending_call_steal_reply (pending);
+    ibus_pending_call_unref (pending);
+
+    if (reply_message == NULL) {
+        g_debug ("%s: Do not recevie reply of ProcessKeyEvent",
+                 DBUS_ERROR_NO_REPLY);
+        processed = FALSE;
+    }
+    else if ((_error = ibus_error_new_from_message (reply_message)) != NULL) {
+        ibus_message_unref (reply_message);
+        processed = FALSE;
+    }
+    else {
+        if (!ibus_message_get_args (reply_message,
+                                    &_error,
+                                    G_TYPE_BOOLEAN, &processed,
+                                    G_TYPE_INVALID)) {
+            processed = FALSE;
+        }
+        ibus_message_unref (reply_message);
+    }
+
+    if (_error != NULL) {
+        if (error != NULL)
+            *error = ibus_error_new_from_text (_error->name, _error->message);
+        ibus_error_free (_error);
+    }
+
+    return processed;
+}
+
 void
 ibus_input_context_set_cursor_location (IBusInputContext *context,
                                         gint32            x,
