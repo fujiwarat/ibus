@@ -3,7 +3,8 @@
          Copyright (C) 1994-1995 Sun Microsystems, Inc.
          Copyright (C) 1993-1994 Hewlett-Packard Company
          Copyright (C) 2014 Peng Huang <shawn.p.huang@gmail.com>
-         Copyright (C) 2014 Red Hat, Inc.
+         Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+         Copyright (C) 2014-2017 Red Hat, Inc.
  
 Permission to use, copy, modify, distribute, and sell this software
 and its documentation for any purpose is hereby granted without fee,
@@ -205,6 +206,8 @@ typedef struct
     int		minor_code;
     CARD16	connect_id;
     XIMStr	lang;
+    CARD8	display_number;
+    CARD8	screen_number;
 } IMOpenStruct;
 
 typedef struct
@@ -501,6 +504,7 @@ typedef struct _Xi18nAddressRec
     /* clients table */
     Xi18nClient *clients;
     Xi18nClient *free_clients;
+    XEvent      *event;
 } Xi18nAddressRec;
 
 typedef struct _Xi18nMethodsRec

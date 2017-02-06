@@ -2,6 +2,7 @@
  
          Copyright 1994, 1995 by Sun Microsystems, Inc.
          Copyright 1993, 1994 by Hewlett-Packard Company
+         Copyright 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
  
 Permission to use, copy, modify, distribute, and sell this software
 and its documentation for any purpose is hereby granted without fee,
@@ -70,7 +71,6 @@ static void ConnectMessageProc (XIMS ims,
     FrameMgr fm;
     extern XimFrameRec connect_fr[], connect_reply_fr[];
     register int total_size;
-    CARD16 server_major_version, server_minor_version;
     unsigned char *reply = NULL;
     IMConnectStruct *imconnect =
         (IMConnectStruct*) &call_data->imconnect;
@@ -89,8 +89,8 @@ static void ConnectMessageProc (XIMS ims,
 
     GetProtocolVersion (imconnect->major_version,
                         imconnect->minor_version,
-                        &server_major_version,
-                        &server_minor_version);
+                        &ims->major_version,
+                        &ims->minor_version);
 #ifdef PROTOCOL_RICH
     if (i18n_core->address.improto)
     {
@@ -116,8 +116,8 @@ static void ConnectMessageProc (XIMS ims,
     memset (reply, 0, total_size);
     FrameMgrSetBuffer (fm, reply);
 
-    FrameMgrPutToken (fm, server_major_version);
-    FrameMgrPutToken (fm, server_minor_version);
+    FrameMgrPutToken (fm, ims->major_version);
+    FrameMgrPutToken (fm, ims->minor_version);
 
     _Xi18nSendMessage (ims,
                        connect_id,
@@ -182,6 +182,10 @@ static void OpenMessageProc(XIMS ims, IMProtocol *call_data, unsigned char *p)
     imopen->lang.name = malloc (str_length + 1);
     strncpy (imopen->lang.name, name, str_length);
     imopen->lang.name[str_length] = (char) 0;
+    if (XIMS_CHECK_VERSION (ims, 1, 1)) {
+        FrameMgrGetToken (fm, imopen->display_number);
+        FrameMgrGetToken (fm, imopen->screen_number);
+    }
 
     FrameMgrFree (fm);
 

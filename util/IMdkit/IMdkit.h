@@ -1,7 +1,9 @@
 /******************************************************************
  
-         Copyright 1994, 1995 by Sun Microsystems, Inc.
-         Copyright 1993, 1994 by Hewlett-Packard Company
+         Copyright (C) 1994-1995 Sun Microsystems, Inc.
+         Copyright (C) 1993-1994 Hewlett-Packard Company
+         Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+         Copyright (C) 2017 Red Hat, Inc.
  
 Permission to use, copy, modify, distribute, and sell this software
 and its documentation for any purpose is hereby granted without fee,
@@ -121,11 +123,16 @@ typedef struct _XIMS
     IMCoreRec	core;
     Bool	sync;
     void	*protocol;
+    CARD16	major_version;
+    CARD16	minor_version;
 } XIMProtocolRec;
 
 /* 
  * X function declarations.
  */
+#define XIMS_CHECK_VERSION(xims,major,minor) \
+    ((xims)->major_version > (major) || \
+     ((xims)->major_version == (major) && (xims)->minor_version >= (minor)))
 extern XIMS IMOpenIM (Display *, ...);
 extern Status IMCloseIM (XIMS);
 extern char *IMSetIMValues (XIMS, ...);

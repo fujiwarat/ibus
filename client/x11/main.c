@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus
  * Copyright (C) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2007-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fuijiwara1@gmail.com>
+ * Copyright (C) 2007-2017 Red Hat, Inc.
  *
  * main.c:
  *
@@ -53,6 +54,8 @@
 
 struct _X11ICONN {
     GList        *clients;
+    gint          display_number;
+    gint          screen_number;
 };
 typedef struct _X11ICONN    X11ICONN;
 
@@ -77,7 +80,8 @@ struct _X11IC {
     gint             onspot_preedit_length;
 };
 
-static void     _xim_set_cursor_location    (X11IC              *x11ic);
+static void     _xim_set_cursor_location    (XIMS                xims,
+                                             X11IC              *x11ic);
 static void     _context_commit_text_cb     (IBusInputContext   *context,
                                              IBusText           *text,
                                              X11IC              *x11ic);
@@ -367,6 +371,7 @@ xim_create_ic (XIMS xims, IMChangeICStruct *call_data)
                          GINT_TO_POINTER (x11ic->icid), (gpointer)x11ic);
     x11ic->conn->clients = g_list_append (x11ic->conn->clients,
                          (gpointer)x11ic);
+
     return 1;
 }
 
@@ -419,7 +424,7 @@ xim_set_ic_focus (XIMS xims, IMChangeFocusStruct *call_data)
     g_return_val_if_fail (x11ic != NULL, 0);
 
     ibus_input_context_focus_in (x11ic->context);
-    _xim_set_cursor_location (x11ic);
+    _xim_set_cursor_location (xims, x11ic);
 
     return 1;
 }
@@ -475,7 +480,7 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
                                                    event.state);
     if (retval) {
         if (! x11ic->has_preedit_area) {
-            _xim_set_cursor_location (x11ic);
+            _xim_set_cursor_location (xims, x11ic);
         }
         return 1;
     }
@@ -509,6 +514,8 @@ xim_open (XIMS xims, IMOpenStruct *call_data)
     g_return_val_if_fail (conn == NULL, 0);
 
     conn = g_slice_new0 (X11ICONN);
+    conn->display_number = call_data->display_number;
+    conn->screen_number = call_data->screen_number;
 
     g_hash_table_insert (_connections,
         (gpointer)(unsigned long)call_data->connect_id,
@@ -570,7 +577,8 @@ xim_close (XIMS ims, IMCloseStruct *call_data)
 
 
 static void
-_xim_set_cursor_location (X11IC *x11ic)
+_xim_set_cursor_location (XIMS   xims,
+                          X11IC *x11ic)
 {
     g_return_if_fail (x11ic != NULL);
 
@@ -604,11 +612,25 @@ _xim_set_cursor_location (X11IC *x11ic)
         }
     }
 
-    ibus_input_context_set_cursor_location (x11ic->context,
-            preedit_area.x,
-            preedit_area.y,
-            preedit_area.width,
-            preedit_area.height);
+    if (XIMS_CHECK_VERSION (xims, 1, 1)) {
+        gchar *display_name = g_strdup_printf (":%d.%d",
+                                               x11ic->conn->display_number,
+                                               x11ic->conn->screen_number);
+        ibus_input_context_set_cursor_varargs (x11ic->context,
+                "x", preedit_area.x,
+                "y", preedit_area.y,
+                "width", preedit_area.width,
+                "height", preedit_area.height,
+                "display_name", display_name,
+                NULL);
+        g_free (display_name);
+    } else {
+        ibus_input_context_set_cursor_location (x11ic->context,
+                preedit_area.x,
+                preedit_area.y,
+                preedit_area.width,
+                preedit_area.height);
+    }
 }
 
 
@@ -628,7 +650,7 @@ xim_set_ic_values (XIMS xims, IMChangeICStruct *call_data)
     i = _xim_store_ic_values (x11ic, call_data);
 
     if (i) {
-        _xim_set_cursor_location (x11ic);
+        _xim_set_cursor_location (xims, x11ic);
     }
 
     return 1;

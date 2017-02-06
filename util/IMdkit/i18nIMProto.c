@@ -1,8 +1,10 @@
 /******************************************************************
-Copyright 1993, 1994 by Digital Equipment Corporation, Maynard, Massachusetts,
-Copyright 1993, 1994 by Hewlett-Packard Company
- 
-Copyright 1994, 1995 by Sun Microsystems, Inc.
+         Copyright (C) 1993-1994 Digital Equipment Corporation, Maynard,
+                                 Massachusetts,
+         Copyright (C) 1993-1994 Hewlett-Packard Company
+         Copyright (C) 1994-1995 Sun Microsystems, Inc.
+         Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+         Copyright (C) 2017 Red Hat, Inc.
  
                         All Rights Reserved
  
@@ -271,6 +273,8 @@ xim_externaldef XimFrameRec open_fr[] =
     _FRAME(POINTER), 		/* locale name */
     _PTR(str_fr),
     _PAD4(1),
+    _FRAME(BIT8), 		/* display number */
+    _FRAME(BIT8), 		/* screen number */
     _FRAME(EOL),
 };
 
