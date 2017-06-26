@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus
  * Copyright (C) 2007-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2007-2010 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fuijiwara1@gmail.com>
+ * Copyright (C) 2007-2017 Red Hat, Inc.
  *
  * main.c:
  *
@@ -110,6 +111,7 @@ static GHashTable     *_connections = NULL;
 static XIMS _xims = NULL;
 static gchar *_server_name = NULL;
 static gchar *_locale = NULL;
+static int _display_number;
 
 static gboolean _kill_daemon = FALSE;
 static gint     g_debug_level = 0;
@@ -500,6 +502,7 @@ static int
 xim_open (XIMS xims, IMOpenStruct *call_data)
 {
     X11ICONN *conn;
+    const gchar *display_name;
 
     LOG (1, "XIM_OPEN connect_id=%d",
                 call_data->connect_id);
@@ -507,6 +510,17 @@ xim_open (XIMS xims, IMOpenStruct *call_data)
     conn = (X11ICONN *) g_hash_table_lookup (_connections,
                                              GINT_TO_POINTER ((gint) call_data->connect_id));
     g_return_val_if_fail (conn == NULL, 0);
+
+    display_name = g_getenv ("DISPLAY");
+    display_name = strchr (display_name, ':');
+    if (display_name) {
+        display_name++;
+        if (*display_name != '\0') {
+            int display_number = atoi (display_name);
+            if (display_number > 0)
+                _display_number = display_number;
+        }
+    }
 
     conn = g_slice_new0 (X11ICONN);
 
@@ -572,6 +586,10 @@ xim_close (XIMS ims, IMCloseStruct *call_data)
 static void
 _xim_set_cursor_location (X11IC *x11ic)
 {
+    Screen *screen = NULL;
+    int screen_number = 0;
+    gchar *display_name;
+
     g_return_if_fail (x11ic != NULL);
 
     GdkRectangle preedit_area = x11ic->preedit_area;
@@ -584,6 +602,8 @@ _xim_set_cursor_location (X11IC *x11ic)
         Window child;
 
         XGetWindowAttributes (GDK_DISPLAY(), w, &xwa);
+        screen = xwa.screen;
+        screen_number = XScreenNumberOfScreen (screen);
         if (preedit_area.x <= 0 && preedit_area.y <= 0) {
              XTranslateCoordinates (GDK_DISPLAY(), w,
                 xwa.root,
@@ -604,11 +624,15 @@ _xim_set_cursor_location (X11IC *x11ic)
         }
     }
 
-    ibus_input_context_set_cursor_location (x11ic->context,
-            preedit_area.x,
-            preedit_area.y,
-            preedit_area.width,
-            preedit_area.height);
+    display_name = g_strdup_printf (":%d.%d", _display_number, screen_number);
+    ibus_input_context_set_cursor_varargs (x11ic->context,
+            "x", preedit_area.x,
+            "y", preedit_area.y,
+            "width", preedit_area.width,
+            "height", preedit_area.height,
+            "display_name", display_name,
+            NULL);
+    g_free (display_name);
 }
 
 
