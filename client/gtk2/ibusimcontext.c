@@ -136,6 +136,8 @@ static gboolean _set_cursor_location_internal
 
 static void     _bus_connected_cb           (IBusBus            *bus,
                                              IBusIMContext      *context);
+static void     _bus_disconnected_cb        (IBusBus            *bus,
+                                             IBusIMContext      *context);
 /* callback functions for slave context */
 static void     _slave_commit_cb            (GtkIMContext       *slave,
                                              gchar              *string,
@@ -590,7 +592,10 @@ ibus_im_context_class_init (IBusIMContextClass *class)
             _create_fake_input_context ();
         }
 
-        g_signal_connect (_bus, "connected", G_CALLBACK (_bus_connected_cb), NULL);
+        g_signal_connect (_bus, "connected",
+                          G_CALLBACK (_bus_connected_cb), NULL);
+        g_signal_connect (_bus, "disconnected",
+                          G_CALLBACK (_bus_disconnected_cb), NULL);
     }
 
 
@@ -722,6 +727,8 @@ ibus_im_context_init (GObject *obj)
     }
 
     g_signal_connect (_bus, "connected", G_CALLBACK (_bus_connected_cb), obj);
+    g_signal_connect (_bus, "disconnected",
+                      G_CALLBACK (_bus_disconnected_cb), obj);
 }
 
 static void
@@ -743,7 +750,12 @@ ibus_im_context_finalize (GObject *obj)
 
     IBusIMContext *ibusimcontext = IBUS_IM_CONTEXT (obj);
 
-    g_signal_handlers_disconnect_by_func (_bus, G_CALLBACK (_bus_connected_cb), obj);
+    g_signal_handlers_disconnect_by_func (_bus,
+                                          G_CALLBACK (_bus_connected_cb),
+                                          obj);
+    g_signal_handlers_disconnect_by_func (_bus,
+                                           G_CALLBACK (_bus_disconnected_cb),
+                                          obj);
 
     if (ibusimcontext->cancellable != NULL) {
         /* Cancel any ongoing create input context request */
@@ -1199,11 +1211,41 @@ static void
 _bus_connected_cb (IBusBus          *bus,
                    IBusIMContext    *ibusimcontext)
 {
-    IDEBUG ("%s", __FUNCTION__);
     if (ibusimcontext)
         _create_input_context (ibusimcontext);
     else
         _create_fake_input_context ();
+}
+
+/* ibus_proxy_connection_closed_cb() is slower than _create_input_context()
+ *  and _create_input_context() has
+ * g_assert(ibusimcontext->ibuscontext == NULL);
+ */
+static void
+_bus_disconnected_cb (IBusBus          *bus,
+                      IBusIMContext    *ibusimcontext)
+{
+    if (ibusimcontext) {
+        if (ibusimcontext->cancellable != NULL) {
+            g_cancellable_cancel (ibusimcontext->cancellable);
+            g_clear_pointer (&ibusimcontext->cancellable, g_object_unref);
+        }
+        if (ibusimcontext->ibuscontext) {
+            ibus_proxy_destroy ((IBusProxy *)ibusimcontext->ibuscontext);
+            ibusimcontext->ibuscontext = NULL;
+        }
+    } else {
+#ifdef OS_CHROMEOS
+        if (_fake_cancellable != NULL) {
+            g_cancellable_cancel (_fake_cancellable);
+            g_clear_pointer (&_fake_cancellable, g_object_unref);
+        }
+        if (_fake_context) {
+            ibus_proxy_destroy ((IBusProxy *)_fake_context);
+            _fake_context = NULL;
+        }
+#endif
+    }
 }
 
 static void

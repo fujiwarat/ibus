@@ -215,6 +215,11 @@ static const gchar introspection_xml[] =
     "    <method name='SetGlobalEngine'>\n"
     "      <arg direction='in'  type='s' name='engine_name' />\n"
     "    </method>\n"
+    "    <method name='GenerateDedicatedAddress'>\n"
+    "      <arg direction='in'  type='s' name='guid' />\n"
+    "      <arg direction='in'  type='s' name='aid' />\n"
+    "      <arg direction='out' type='s' name='address' />\n"
+    "    </method>\n"
     "    <signal name='RegistryChanged'>\n"
     "    </signal>\n"
     "    <signal name='GlobalEngineChanged'>\n"
@@ -920,7 +925,9 @@ _ibus_create_input_context (BusIBusImpl           *ibus,
     if (context) {
         const gchar *path = ibus_service_get_object_path ((IBusService *) context);
         /* the format-string 'o' is for a D-Bus object path. */
-        g_dbus_method_invocation_return_value (invocation, g_variant_new ("(o)", path));
+        g_dbus_method_invocation_return_value (
+                invocation,
+                g_variant_new ("(o)", path));
         g_object_unref (context);
     }
     else {
@@ -1473,6 +1480,69 @@ _ibus_set_global_engine (BusIBusImpl           *ibus,
                                           data);
 }
 
+static gchar *
+coded_address (gchar   *address,
+               guint32  key)
+{
+    const gchar min = 0x21;
+    const gchar max = 0x7e;
+    gchar range = max - min;
+    int i;
+    gchar effect = key % range;
+
+    g_return_val_if_fail (address != NULL, NULL);
+
+    for (i = 0; address[i] != '\0'; i++) {
+        gchar c = address[i];
+        address[i] = (c - min + effect) % range + min;
+    }
+
+    return address;
+}
+
+/**
+ * _ibus_generate_dedicated_address:
+ *
+ * Implement the "GenerateDedicatedAddress" method call of the
+ * org.freedesktop.IBus interface.
+ */
+static void
+_ibus_generate_dedicated_address (BusIBusImpl           *ibus,
+                                  GVariant              *parameters,
+                                  GDBusMethodInvocation *invocation)
+{
+    const gchar *guid = NULL;
+    const gchar *aid = NULL;
+    guint32 key = 0;
+    gchar *address;
+
+    g_variant_get (parameters, "(&s&s)", &guid, &aid);
+    if (guid == NULL || !g_dbus_is_guid (guid)) {
+        g_dbus_method_invocation_return_error (invocation,
+                                               G_DBUS_ERROR,
+                                               G_DBUS_ERROR_FAILED,
+                                               "Cannot get the correct guid.");
+        return;
+    }
+    if (aid != NULL) {
+        key = (guint32) g_ascii_strtoull (aid, NULL, 16);
+    }
+    address = bus_server_insert_server_with_guid (guid);
+    address = coded_address (address, key);
+    if (address == NULL) {
+        g_dbus_method_invocation_return_error (
+                invocation,
+                G_DBUS_ERROR,
+                G_DBUS_ERROR_FAILED,
+                "Cannot generate a dedicated DBus server.");
+        return;
+    }
+    g_dbus_method_invocation_return_value (
+            invocation,
+            g_variant_new ("(s)", address));
+    g_free (address);
+}
+
 /**
  * _ibus_get_global_engine_enabled:
  *
@@ -1678,6 +1748,7 @@ bus_ibus_impl_service_method_call (IBusService           *service,
         { "Exit",                  _ibus_exit },
         { "Ping",                  _ibus_ping },
         { "SetGlobalEngine",       _ibus_set_global_engine },
+        { "GenerateDedicatedAddress", _ibus_generate_dedicated_address },
         /* Start of deprecated methods */
         { "GetAddress",            _ibus_get_address_depre },
         { "CurrentInputContext",   _ibus_current_input_context_depre },
