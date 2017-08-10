@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2013 Red Hat, Inc.
+ * Copyright (C) 2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -49,77 +50,77 @@
  *
  * Address of IBus service.
  */
-#define IBUS_SERVICE_IBUS       "org.freedesktop.IBus"
+#define IBUS_SERVICE_IBUS       "org.freedesktop.portal.IBus"
 
 /**
  * IBUS_SERVICE_PANEL:
  *
  * Address of IBus panel service.
  */
-#define IBUS_SERVICE_PANEL      "org.freedesktop.IBus.Panel"
+#define IBUS_SERVICE_PANEL      "org.freedesktop.portal.IBus.Panel"
 
 /**
  * IBUS_SERVICE_CONFIG:
  *
  * Address of IBus config service.
  */
-#define IBUS_SERVICE_CONFIG     "org.freedesktop.IBus.Config"
+#define IBUS_SERVICE_CONFIG     "org.freedesktop.portal.IBus.Config"
 
 /**
  * IBUS_SERVICE_NOTIFICATIONS:
  *
  * Address of IBus notification service.
  */
-#define IBUS_SERVICE_NOTIFICATIONS    "org.freedesktop.IBus.Notifications"
+#define IBUS_SERVICE_NOTIFICATIONS   "org.freedesktop.portal.IBus.Notifications"
 
 /**
  * IBUS_PATH_IBUS:
  *
  * D-Bus path for IBus
  */
-#define IBUS_PATH_IBUS          "/org/freedesktop/IBus"
+#define IBUS_PATH_IBUS          "/org/freedesktop/portal/IBus"
 
 /**
  * IBUS_PATH_FACTORY:
  *
  * D-Bus path for IBus factory.
  */
-#define IBUS_PATH_FACTORY       "/org/freedesktop/IBus/Factory"
+#define IBUS_PATH_FACTORY       "/org/freedesktop/portal/IBus/Factory"
 
 /**
  * IBUS_PATH_PANEL:
  *
  * D-Bus path for IBus panel.
  */
-#define IBUS_PATH_PANEL         "/org/freedesktop/IBus/Panel"
+#define IBUS_PATH_PANEL         "/org/freedesktop/portal/IBus/Panel"
 
 /**
  * IBUS_PATH_CONFIG:
  *
  * D-Bus path for IBus config.
  */
-#define IBUS_PATH_CONFIG        "/org/freedesktop/IBus/Config"
+#define IBUS_PATH_CONFIG        "/org/freedesktop/portal/IBus/Config"
 
 /**
  * IBUS_PATH_NOTIFICATIONS:
  *
  * D-Bus path for IBus notifications.
  */
-#define IBUS_PATH_NOTIFICATIONS "/org/freedesktop/IBus/Notifications"
+#define IBUS_PATH_NOTIFICATIONS "/org/freedesktop/portal/IBus/Notifications"
 
 /**
  * IBUS_PATH_INPUT_CONTEXT:
  *
  * Template of D-Bus path for IBus input context.
  */
-#define IBUS_PATH_INPUT_CONTEXT "/org/freedesktop/IBus/InputContext_%d"
+#define IBUS_PATH_INPUT_CONTEXT "/org/freedesktop/portal/IBus/InputContext_%d"
 
 /**
  * IBUS_INTERFACE_IBUS:
  *
  * D-Bus interface for IBus.
  */
-#define IBUS_INTERFACE_IBUS     "org.freedesktop.IBus"
+#define IBUS_INTERFACE_IBUS     "org.freedesktop.portal.IBus"
 
 /**
  * IBUS_INTERFACE_INPUT_CONTEXT:
@@ -127,42 +128,42 @@
  * D-Bus interface for IBus input context.
  */
 #define IBUS_INTERFACE_INPUT_CONTEXT \
-                                "org.freedesktop.IBus.InputContext"
+                                "org.freedesktop.portal.IBus.InputContext"
 
 /**
  * IBUS_INTERFACE_FACTORY:
  *
  * D-Bus interface for IBus factory.
  */
-#define IBUS_INTERFACE_FACTORY  "org.freedesktop.IBus.Factory"
+#define IBUS_INTERFACE_FACTORY  "org.freedesktop.portal.IBus.Factory"
 
 /**
  * IBUS_INTERFACE_ENGINE:
  *
  * D-Bus interface for IBus engine.
  */
-#define IBUS_INTERFACE_ENGINE   "org.freedesktop.IBus.Engine"
+#define IBUS_INTERFACE_ENGINE   "org.freedesktop.portal.IBus.Engine"
 
 /**
  * IBUS_INTERFACE_PANEL:
  *
  * D-Bus interface for IBus panel.
  */
-#define IBUS_INTERFACE_PANEL    "org.freedesktop.IBus.Panel"
+#define IBUS_INTERFACE_PANEL    "org.freedesktop.portal.IBus.Panel"
 
 /**
  * IBUS_INTERFACE_CONFIG:
  *
  * D-Bus interface for IBus config.
  */
-#define IBUS_INTERFACE_CONFIG   "org.freedesktop.IBus.Config"
+#define IBUS_INTERFACE_CONFIG   "org.freedesktop.portal.IBus.Config"
 
 /**
  * IBUS_INTERFACE_NOTIFICATIONS:
  *
  * D-Bus interface for IBus notifications.
  */
-#define IBUS_INTERFACE_NOTIFICATIONS    "org.freedesktop.IBus.Notifications"
+#define IBUS_INTERFACE_NOTIFICATIONS "org.freedesktop.portal.IBus.Notifications"
 
 G_BEGIN_DECLS
 

@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2013 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -181,7 +182,7 @@ G_DEFINE_TYPE (IBusEngine, ibus_engine, IBUS_TYPE_SERVICE)
 
 static const gchar introspection_xml[] =
     "<node>"
-    "  <interface name='org.freedesktop.IBus.Engine'>"
+    "  <interface name='" IBUS_INTERFACE_ENGINE "'>"
     /* FIXME methods */
     "    <method name='ProcessKeyEvent'>"
     "      <arg direction='in'  type='u' name='keyval' />"
@@ -1296,7 +1297,7 @@ ibus_engine_dbus_property_changed (IBusEngine  *engine,
                                          "org.freedesktop.DBus.Properties",
                                          "PropertiesChanged");
 
-    g_dbus_message_set_sender (message, "org.freedesktop.IBus");
+    g_dbus_message_set_sender (message, IBUS_SERVICE_IBUS);
 
     builder = g_variant_builder_new (G_VARIANT_TYPE_ARRAY);
     g_variant_builder_add (builder, "{sv}", property_name, value);

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- filename: dconf.xml -->
 <component>
-	<name>org.freedesktop.IBus.Config</name>
+	<name>org.freedesktop.portal.IBus.Config</name>
 	<description>Dconf Config Component</description>
 	<exec>@libexecdir@/ibus-dconf</exec>
 	<version>@VERSION@</version>

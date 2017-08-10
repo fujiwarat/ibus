@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component>
-	<name>org.freedesktop.IBus.Simple</name>
+	<name>org.freedesktop.portal.IBus.Simple</name>
 	<description>A table based simple engine</description>
 	<exec>@libexecdir@/ibus-engine-simple</exec>
 	<version>@VERSION@</version>

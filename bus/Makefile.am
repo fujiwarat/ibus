@@ -3,7 +3,8 @@
 # ibus - The Input Bus
 #
 # Copyright (c) 2007-2013 Peng Huang <shawn.p.huang@gmail.com>
-# Copyright (c) 2007-2013 Red Hat, Inc.
+# Copyright (c) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+# Copyright (c) 2007-2017 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -32,6 +33,7 @@ AM_CPPFLAGS =                \
 AM_CFLAGS = \
 	@GLIB2_CFLAGS@ \
 	@GIO2_CFLAGS@ \
+	@GIO_UNIX2_CFLAGS@ \
 	@GTHREAD2_CFLAGS@ \
 	-DG_LOG_DOMAIN=\"IBUS\" \
 	-DPKGDATADIR=\"$(pkgdatadir)\" \
@@ -43,6 +45,7 @@ AM_LDADD = \
 	@GOBJECT2_LIBS@ \
 	@GLIB2_LIBS@ \
 	@GIO2_LIBS@ \
+	@GIO_UNIX2_LIBS@ \
 	@GTHREAD2_LIBS@ \
 	$(libibus) \
 	$(NULL)
@@ -183,11 +186,11 @@ man_onedir = $(mandir)/man1
 	$(AM_V_GEN) gzip -c $< > $@.tmp && mv $@.tmp $@
 
 
-dbusservice_in_files = org.freedesktop.IBus.service.in
+dbusservice_in_files = org.freedesktop.portal.IBus.service.in
 dbusservice_DATA = $(dbusservice_in_files:.service.in=.service)
 dbusservicedir=${datadir}/dbus-1/services
 
-org.freedesktop.IBus.service: org.freedesktop.IBus.service.in
+org.freedesktop.portal.IBus.service: org.freedesktop.portal.IBus.service.in
 	$(AM_V_GEN) sed -e "s|\@bindir\@|$(bindir)|" -e "s|\@xim_cli_arg\@|$(XIM_CLI_ARG)|" $< > $@.tmp && mv $@.tmp $@
 
 EXTRA_DIST += $(dbusservice_in_files)

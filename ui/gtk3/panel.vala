@@ -106,7 +106,7 @@ class Panel : IBus.PanelService {
         GLib.assert(bus.is_connected());
         // Chain up base class constructor
         GLib.Object(connection : bus.get_connection(),
-                    object_path : "/org/freedesktop/IBus/Panel");
+                    object_path : IBus.PATH_PANEL);
 
         m_bus = bus;
 

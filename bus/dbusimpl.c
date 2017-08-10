@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2013 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -691,7 +692,7 @@ bus_dbus_impl_list_names (BusDBusImpl           *dbus,
 
     /* FIXME should add them? */
     g_variant_builder_add (&builder, "s", "org.freedesktop.DBus");
-    g_variant_builder_add (&builder, "s", "org.freedesktop.IBus");
+    g_variant_builder_add (&builder, "s", IBUS_SERVICE_IBUS);
 
     /* append well-known names */
     GList *names, *name;
@@ -742,7 +743,7 @@ bus_dbus_impl_name_has_owner (BusDBusImpl           *dbus,
     }
     else {
         if (g_strcmp0 (name, "org.freedesktop.DBus") == 0 ||
-            g_strcmp0 (name, "org.freedesktop.IBus") == 0)
+            g_strcmp0 (name, IBUS_SERVICE_IBUS) == 0)
             has_owner = TRUE;
         else
             has_owner = g_hash_table_lookup (dbus->names, name) != NULL;
@@ -767,7 +768,7 @@ bus_dbus_impl_get_name_owner (BusDBusImpl           *dbus,
     g_variant_get (parameters, "(&s)", &name);
 
     if (g_strcmp0 (name, "org.freedesktop.DBus") == 0 ||
-        g_strcmp0 (name, "org.freedesktop.IBus") == 0) {
+        g_strcmp0 (name, IBUS_SERVICE_IBUS) == 0) {
         name_owner = name;
     }
     else {
@@ -996,7 +997,7 @@ bus_dbus_impl_request_name (BusDBusImpl           *dbus,
     }
 
     if (g_strcmp0 (name, "org.freedesktop.DBus") == 0 ||
-        g_strcmp0 (name, "org.freedesktop.IBus") == 0) {
+        g_strcmp0 (name, IBUS_SERVICE_IBUS) == 0) {
         g_dbus_method_invocation_return_error (invocation,
                         G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
                         "Can not acquire the service name '%s', it is reserved by IBus", name);
@@ -1106,7 +1107,7 @@ bus_dbus_impl_release_name (BusDBusImpl           *dbus,
     }
 
     if (g_strcmp0 (name, "org.freedesktop.DBus") == 0 ||
-        g_strcmp0 (name, "org.freedesktop.IBus") == 0) {
+        g_strcmp0 (name, IBUS_SERVICE_IBUS) == 0) {
         g_dbus_method_invocation_return_error (invocation,
                         G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
                         "Service name '%s' is owned by IBus.", name);
@@ -1189,7 +1190,7 @@ bus_dbus_impl_start_service_by_name (BusDBusImpl           *dbus,
     }
 
     if (g_strcmp0 (name, "org.freedesktop.DBus") == 0 ||
-        g_strcmp0 (name, "org.freedesktop.IBus") == 0) {
+        g_strcmp0 (name, IBUS_SERVICE_IBUS) == 0) {
         g_dbus_method_invocation_return_error (invocation,
                         G_DBUS_ERROR, G_DBUS_ERROR_INVALID_ARGS,
                         "Service name '%s' is owned by IBus.", name);
@@ -1491,8 +1492,10 @@ bus_dbus_impl_connection_filter_cb (GDBusConnection *dbus_connection,
         /* connection unique name as sender of the message*/
         g_dbus_message_set_sender (message, bus_connection_get_unique_name (connection));
 
-        if (g_strcmp0 (destination, "org.freedesktop.IBus") == 0) {
-            /* the message is sent to IBus service. messages from ibusbus and ibuscontext may fall into this category. */
+        if (g_strcmp0 (destination, IBUS_SERVICE_IBUS) == 0) {
+            /* the message is sent to IBus service. messages from ibusbus and
+             * ibuscontext may fall into this category.
+             */
             switch (message_type) {
             case G_DBUS_MESSAGE_TYPE_METHOD_CALL:
             case G_DBUS_MESSAGE_TYPE_METHOD_RETURN:

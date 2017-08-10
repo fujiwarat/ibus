@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -81,7 +82,7 @@ G_DEFINE_TYPE (IBusConfigService, ibus_config_service, IBUS_TYPE_SERVICE)
 
 static const gchar introspection_xml[] =
     "<node>"
-    "  <interface name='org.freedesktop.IBus.Config'>"
+    "  <interface name='" IBUS_INTERFACE_CONFIG "'>"
     "    <method name='SetValue'>"
     "      <arg direction='in'  type='s' name='section' />"
     "      <arg direction='in'  type='s' name='name' />"

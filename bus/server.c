@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* bus - The Input Bus
  * Copyright (C) 2008-2010 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2010 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,15 +23,18 @@
 #include "server.h"
 
 #include <gio/gio.h>
+
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include "dbusimpl.h"
 #include "ibusimpl.h"
 #include "global.h"
 
 
-static GDBusServer *server = NULL;
+static BusIBusShare *server = NULL;
 static GMainLoop *mainloop = NULL;
 static BusDBusImpl *dbus = NULL;
 static BusIBusImpl *ibus = NULL;
@@ -96,46 +100,49 @@ bus_new_connection_cb (GDBusServer     *server,
 void
 bus_server_init (void)
 {
-    GError *error = NULL;
-
     dbus = bus_dbus_impl_get_default ();
     ibus = bus_ibus_impl_get_default ();
     bus_dbus_impl_register_object (dbus, (IBusService *)ibus);
 
-    /* init server */
-    GDBusServerFlags flags = G_DBUS_SERVER_FLAGS_AUTHENTICATION_ALLOW_ANONYMOUS;
-    gchar *guid = g_dbus_generate_guid ();
-    if (!g_str_has_prefix (g_address, "unix:tmpdir=")) {
-        g_error ("Your socket address does not have the format unix:tmpdir=$DIR; %s",
-                 g_address);
-    }
-    server =  g_dbus_server_new_sync (
-                    g_address, /* the place where the socket file lives, e.g. /tmp, abstract namespace, etc. */
-                    flags, guid,
-                    NULL /* observer */,
-                    NULL /* cancellable */,
-                    &error);
-    if (server == NULL) {
-        g_error ("g_dbus_server_new_sync() is failed with address %s "
-                 "and guid %s: %s",
-                 g_address, guid, error->message);
-    }
-    g_free (guid);
-
-    g_signal_connect (server, "new-connection", G_CALLBACK (bus_new_connection_cb), NULL);
-
-    g_dbus_server_start (server);
-
-    address = g_strdup_printf ("%s,guid=%s",
-                               g_dbus_server_get_client_address (server),
-                               g_dbus_server_get_guid (server));
-
-    /* write address to file */
+    server = bus_ibus_share_get_default ();
+    address = g_strdup ("unix:abstract=/tmp/dbus-no-longer-used");
     ibus_write_address (address);
+}
 
-    /* own a session bus name so that third parties can easily track our life-cycle */
-    g_bus_own_name (G_BUS_TYPE_SESSION, IBUS_SERVICE_IBUS, G_BUS_NAME_OWNER_FLAGS_NONE,
-                    NULL, NULL, NULL, NULL, NULL);
+int
+bus_server_start_with_socketpair (const gchar *guid) {
+    int sv[2];
+    GError *error = NULL;
+    GSocket *socket;
+    GSocketConnection *socket_connection;
+    GDBusConnection *connection;
+    gboolean claimed;
+
+    errno = 0;
+    if (socketpair (AF_UNIX, SOCK_STREAM, 0, sv) != 0)
+        g_error ("Failed to generate socket: %s", strerror (errno));
+    if (sv[0] <= 0 || sv[1] <= 0)
+        g_error ("Wrong socket descriptors : %d, %d", sv[0], sv[1]);
+    socket = g_socket_new_from_fd (sv[1], &error);
+    g_assert_no_error (error);
+    socket_connection = g_socket_connection_factory_create_connection (socket);
+    g_assert (socket_connection != NULL);
+    g_object_unref (socket);
+    connection = g_dbus_connection_new_sync (G_IO_STREAM (socket_connection),
+                                             guid,
+                                             G_DBUS_CONNECTION_FLAGS_NONE,
+                                             NULL,
+                                             NULL,
+                                             &error);
+    g_dbus_connection_set_exit_on_close (connection, TRUE);
+    g_assert_no_error (error);
+    g_object_unref (socket_connection);
+    claimed = bus_new_connection_cb (NULL, connection, NULL);
+    if (claimed)
+        g_dbus_connection_start_message_processing (connection);
+    g_object_unref (connection);
+
+    return sv[0];
 }
 
 const gchar *
@@ -153,18 +160,7 @@ bus_server_run (void)
     mainloop = g_main_loop_new (NULL, FALSE);
     g_main_loop_run (mainloop);
 
-    /* bus_server_quit is called. stop server */
-    g_dbus_server_stop (server);
-
-    ibus_object_destroy ((IBusObject *)dbus);
-    ibus_object_destroy ((IBusObject *)ibus);
-
-    /* release resources */
-    g_object_unref (server);
-    g_main_loop_unref (mainloop);
-    mainloop = NULL;
-    g_free (address);
-    address = NULL;
+    ibus_object_destroy (IBUS_OBJECT (server));
 
     /* When _ibus_exit() is called, bus_ibus_impl_destroy() needs
      * to be called so that waitpid() prevents the processes from

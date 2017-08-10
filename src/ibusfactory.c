@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2015 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2015 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -91,7 +92,7 @@ G_DEFINE_TYPE (IBusFactory, ibus_factory, IBUS_TYPE_SERVICE)
 
 static const gchar introspection_xml[] =
     "<node>"
-    "  <interface name='org.freedesktop.IBus.Factory'>"
+    "  <interface name='" IBUS_INTERFACE_FACTORY "'>"
     "    <method name='CreateEngine'>"
     "      <arg direction='in'  type='s' name='name' />"
     "      <arg direction='out' type='o' />"
@@ -112,7 +113,7 @@ ibus_factory_real_create_engine (IBusFactory    *factory,
 
     g_return_val_if_fail (engine_type != G_TYPE_INVALID, NULL);
 
-    object_path = g_strdup_printf ("/org/freedesktop/IBus/Engine/%d",
+    object_path = g_strdup_printf (IBUS_PATH_IBUS "/Engine/%d",
                                    ++factory->priv->id);
     engine = ibus_engine_new_with_type (engine_type,
                                         engine_name,

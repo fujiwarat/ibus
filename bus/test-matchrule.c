@@ -24,15 +24,16 @@ main(gint argc, gchar **argv)
     g_type_init ();
 #endif
 
-    rule = bus_match_rule_new (" type='signal' , interface = 'org.freedesktop.IBus' ");
+    rule = bus_match_rule_new (" type='signal' , interface = '" \
+                               IBUS_INTERFACE_IBUS "' ");
     g_assert (rule->message_type == G_DBUS_MESSAGE_TYPE_SIGNAL);
-    g_assert (g_strcmp0 (rule->interface, "org.freedesktop.IBus") == 0 );
+    g_assert (g_strcmp0 (rule->interface, IBUS_INTERFACE_IBUS) == 0 );
     g_object_unref (rule);
 
     rule = bus_match_rule_new ("type='method_call'    ,\n"
-        "    interface='org.freedesktop.IBus'   ");
+        "    interface='" IBUS_INTERFACE_IBUS "'   ");
     g_assert (rule->message_type == G_DBUS_MESSAGE_TYPE_METHOD_CALL);
-    g_assert (g_strcmp0 (rule->interface, "org.freedesktop.IBus") == 0 );
+    g_assert (g_strcmp0 (rule->interface, IBUS_INTERFACE_IBUS) == 0 );
     g_object_unref (rule);
 
     rule = bus_match_rule_new ("type='signal',"
@@ -55,7 +56,8 @@ main(gint argc, gchar **argv)
     g_object_unref (rule);
     g_object_unref (rule1);
 
-    rule = bus_match_rule_new ("type='method_call',interface='org.freedesktop.IBus ");
+    rule = bus_match_rule_new ("type='method_call',interface='" \
+                               IBUS_INTERFACE_IBUS "'");
     g_assert (rule == NULL);
 
     rule = bus_match_rule_new ("eavesdrop=true");

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component>
-	<name>org.freedesktop.IBus.Config</name>
+	<name>org.freedesktop.portal.IBus.Config</name>
 	<description>On-memory Config Component</description>
 	<exec>@libexecdir@/ibus-memconf</exec>
 	<version>@VERSION@</version>

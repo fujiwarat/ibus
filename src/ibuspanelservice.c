@@ -151,7 +151,7 @@ G_DEFINE_TYPE (IBusPanelService, ibus_panel_service, IBUS_TYPE_SERVICE)
 
 static const gchar introspection_xml[] =
     "<node>"
-    "  <interface name='org.freedesktop.IBus.Panel'>"
+    "  <interface name='" IBUS_INTERFACE_PANEL "'>"
     /* Methods */
     "    <method name='UpdatePreeditText'>"
     "      <arg direction='in'  type='v' name='text' />"

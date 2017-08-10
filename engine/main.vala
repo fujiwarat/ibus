@@ -3,7 +3,7 @@
  * ibus - The Input Bus
  *
  * Copyright (c) 2011-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (c) 2015 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (c) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -49,7 +49,7 @@ public int main(string[] args) {
         if (!name.has_prefix("xkb:"))
             return null;
 
-        const string path = "/org/freedesktop/IBus/engine/simple/%d";
+        const string path = IBus.PATH_IBUS + "/engine/simple/%d";
 
         IBus.Engine engine = new IBus.Engine.with_type(
             typeof(IBus.EngineSimple), name,
@@ -94,10 +94,10 @@ public int main(string[] args) {
     uint flags = 
         IBus.BusNameFlag.REPLACE_EXISTING |
         IBus.BusNameFlag.ALLOW_REPLACEMENT;
-    uint retval = bus.request_name("org.freedesktop.IBus.Simple", flags);
+    uint retval = bus.request_name(IBus.SERVICE_IBUS + ".Simple", flags);
 
     if (retval == 0) {
-        warning("Registry bus name org.freedesktop.IBus.Simple failed!");
+        warning("Registry bus name " + IBus.SERVICE_IBUS + ".Simple failed!");
         return 1;
     }
 

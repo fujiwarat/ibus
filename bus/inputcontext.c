@@ -215,7 +215,7 @@ static IBusPropList    *props_empty = NULL;
  * src/ibusservice.c for details.) */
 static const gchar introspection_xml[] =
     "<node>"
-    "  <interface name='org.freedesktop.IBus.InputContext'>"
+    "  <interface name='" IBUS_INTERFACE_INPUT_CONTEXT "'>"
     /* methods */
     "    <method name='ProcessKeyEvent'>"
     "      <arg direction='in'  type='u' name='keyval' />"
@@ -678,7 +678,7 @@ bus_input_context_send_signal (BusInputContext *context,
     GDBusMessage *message = g_dbus_message_new_signal (ibus_service_get_object_path ((IBusService *)context),
                                                        interface_name,
                                                        signal_name);
-    g_dbus_message_set_sender (message, "org.freedesktop.IBus");
+    g_dbus_message_set_sender (message, IBUS_SERVICE_IBUS);
     g_dbus_message_set_destination (message, bus_connection_get_unique_name (context->connection));
     if (parameters != NULL)
         g_dbus_message_set_body (message, parameters);
@@ -709,7 +709,7 @@ bus_input_context_emit_signal (BusInputContext *context,
     }
 
     return bus_input_context_send_signal (context,
-                                          "org.freedesktop.IBus.InputContext",
+                                          IBUS_INTERFACE_INPUT_CONTEXT,
                                           signal_name,
                                           parameters,
                                           error);
@@ -740,7 +740,7 @@ bus_input_context_property_changed (BusInputContext *context,
                                           "org.freedesktop.DBus.Properties",
                                           "PropertiesChanged",
                                           g_variant_new ("(sa{sv}as)",
-                                                         "org.freedesktop.IBus",
+                                                         IBUS_SERVICE_IBUS,
                                                          &builder,
                                                          NULL),
                                           error);
@@ -773,7 +773,8 @@ _ic_process_key_event_reply_cb (GObject               *source,
 /**
  * _ic_process_key_event:
  *
- * Implement the "ProcessKeyEvent" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "ProcessKeyEvent" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_process_key_event  (BusInputContext       *context,
@@ -841,7 +842,8 @@ _ic_process_key_event  (BusInputContext       *context,
 /**
  * _ic_set_cursor_location:
  *
- * Implement the "SetCursorLocation" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "SetCursorLocation" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_set_cursor_location (BusInputContext       *context,
@@ -873,7 +875,7 @@ _ic_set_cursor_location (BusInputContext       *context,
  * _ic_set_cursor_location_relative:
  *
  * Implement the "SetCursorLocationRelative" method call of the
- * org.freedesktop.IBus.InputContext interface.
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  *
  * Unlike _ic_set_cursor_location, this doesn't deliver the location
  * to the engine proxy, since the relative coordinates are not very
@@ -933,7 +935,8 @@ _ic_cancel_hand_writing (BusInputContext       *context,
 /**
  * _ic_focus_in:
  *
- * Implement the "FocusIn" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "FocusIn" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_focus_in (BusInputContext       *context,
@@ -953,7 +956,8 @@ _ic_focus_in (BusInputContext       *context,
 /**
  * _ic_focus_out:
  *
- * Implement the "FocusOut" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "FocusOut" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_focus_out (BusInputContext       *context,
@@ -973,7 +977,8 @@ _ic_focus_out (BusInputContext       *context,
 /**
  * _ic_reset:
  *
- * Implement the "Reset" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "Reset" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_reset (BusInputContext       *context,
@@ -989,7 +994,8 @@ _ic_reset (BusInputContext       *context,
 /**
  * _ic_set_capabilities:
  *
- * Implement the "SetCapabilities" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "SetCapabilities" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_set_capabilities (BusInputContext       *context,
@@ -1007,7 +1013,8 @@ _ic_set_capabilities (BusInputContext       *context,
 /**
  * _ic_property_activate:
  *
- * Implement the "PropertyActivate" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "PropertyActivate" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_property_activate (BusInputContext       *context,
@@ -1059,7 +1066,8 @@ _ic_set_engine_done (BusInputContext       *context,
 /**
  * _ic_set_engine:
  *
- * Implement the "SetEngine" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "SetEngine" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_set_engine (BusInputContext       *context,
@@ -1100,7 +1108,8 @@ _ic_set_engine (BusInputContext       *context,
 /**
  * _ic_get_engine:
  *
- * Implement the "GetEngine" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "GetEngine" method call of the
+ * @IBUS_INTERFACE_INPUT_CONTEXT interface.
  */
 static void
 _ic_get_engine (BusInputContext       *context,
@@ -1151,7 +1160,8 @@ _ic_set_surrounding_text (BusInputContext       *context,
 /**
  * bus_input_context_service_method_call:
  *
- * Handle a D-Bus method call whose destination and interface name are both "org.freedesktop.IBus.InputContext"
+ * Handle a D-Bus method call whose destination and interface name are both
+ * @IBUS_INTERFACE_INPUT_CONTEXT
  */
 static void
 bus_input_context_service_method_call (IBusService            *service,

@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2015 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2015 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,6 +21,7 @@
  * USA
  */
 #include "ibusservice.h"
+#include "ibusshare.h"
 #include "ibusinternal.h"
 
 #define IBUS_SERVICE_GET_PRIVATE(o)  \
@@ -186,7 +188,7 @@ ibus_service_base_fini (IBusServiceClass *class)
 
 static const gchar introspection_xml[] =
     "<node>"
-    "  <interface name='org.freedesktop.IBus.Service'>"
+    "  <interface name='" IBUS_INTERFACE_IBUS ".Service'>"
     "    <method name='Destroy' />"
     "  </interface>"
     "</node>";

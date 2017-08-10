@@ -155,6 +155,9 @@ PKG_CHECK_MODULES(GOBJECT2, [
 PKG_CHECK_MODULES(GIO2, [
     gio-2.0 >= glib_required_version
 ])
+PKG_CHECK_MODULES(GIO_UNIX2, [
+    gio-unix-2.0 >= glib_required_version
+])
 PKG_CHECK_MODULES(GTHREAD2, [
     gthread-2.0 >= glib_required_version
 ])

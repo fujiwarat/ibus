@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2013 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,6 +23,8 @@
 
 #include "ibusimpl.h"
 
+#include <gio/gunixfdlist.h>
+
 #include <locale.h>
 #include <signal.h>
 #include <strings.h>
@@ -37,6 +40,17 @@
 #include "panelproxy.h"
 #include "server.h"
 #include "types.h"
+
+struct _BusIBusShare {
+    IBusService parent;
+    gchar *guid;
+    gchar *aid;
+};
+
+struct _BusIBusShareClass {
+    IBusServiceClass parent;
+    guint id;
+};
 
 struct _BusIBusImpl {
     IBusService parent;
@@ -102,6 +116,41 @@ static guint            _signals[LAST_SIGNAL] = { 0 };
 */
 
 /* functions prototype */
+static GObject *bus_ibus_share_constructor
+                                        (GType               type,
+                                         guint               n_params,
+                                         GObjectConstructParam
+                                                            *params);
+static void     bus_ibus_share_destroy  (BusIBusShare       *ibus);
+static void     bus_ibus_share_service_method_call
+                                        (IBusService        *service,
+                                         GDBusConnection    *connection,
+                                         const gchar        *sender,
+                                         const gchar        *object_path,
+                                         const gchar        *interface_name,
+                                         const gchar        *method_name,
+                                         GVariant           *parameters,
+                                         GDBusMethodInvocation
+                                                            *invocation);
+static GVariant *
+                bus_ibus_share_service_get_property
+                                        (IBusService        *service,
+                                         GDBusConnection    *connection,
+                                         const gchar        *sender,
+                                         const gchar        *object_path,
+                                         const gchar        *interface_name,
+                                         const gchar        *property_name,
+                                         GError            **error);
+static gboolean
+                bus_ibus_share_service_set_property
+                                        (IBusService        *service,
+                                         GDBusConnection    *connection,
+                                         const gchar        *sender,
+                                         const gchar        *object_path,
+                                         const gchar        *interface_name,
+                                         const gchar        *property_name,
+                                         GVariant           *value,
+                                         GError            **error);
 static void     bus_ibus_impl_destroy   (BusIBusImpl        *ibus);
 static void     bus_ibus_impl_service_method_call
                                         (IBusService        *service,
@@ -177,9 +226,25 @@ static void     _context_engine_changed_cb
  * for details.)
  * Implement org.freedesktop.DBus.Properties
  * http://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-properties */
+static const gchar introspection_shared_xml[] =
+    "<node>\n"
+    "  <interface name= '" IBUS_INTERFACE_IBUS "'>\n"
+    "    <property name='SecAid' type='s' access='write' />\n"
+    "    <method name='Exit'>\n"
+    "      <arg direction='in'  type='b' name='restart' />\n"
+    "    </method>\n"
+    "    <method name='GetFD'>\n"
+    "      <arg direction='out'  type='s' name='guid' />\n"
+    "    </method>\n"
+    "    <method name='Ping'>\n"
+    "      <arg direction='in'  type='v' name='data' />\n"
+    "      <arg direction='out' type='v' name='data' />\n"
+    "    </method>\n"
+    "  </interface>\n"
+    "</node>";
 static const gchar introspection_xml[] =
     "<node>\n"
-    "  <interface name='org.freedesktop.IBus'>\n"
+    "  <interface name='" IBUS_INTERFACE_IBUS "'>\n"
     "    <property name='Address' type='s' access='read' />\n"
     "    <property name='CurrentInputContext' type='o' access='read' />\n"
     "    <property name='Engines' type='av' access='read' />\n"
@@ -256,7 +321,130 @@ static const gchar introspection_xml[] =
     "</node>\n";
 
 
+G_DEFINE_TYPE(BusIBusShare, bus_ibus_share, IBUS_TYPE_SERVICE)
 G_DEFINE_TYPE (BusIBusImpl, bus_ibus_impl, IBUS_TYPE_SERVICE)
+
+static void
+bus_ibus_share_name_acquired (GDBusConnection *connection,
+                              const gchar     *name,
+                              gpointer         user_data)
+{
+}
+
+static void
+bus_ibus_share_name_lost (GDBusConnection *connection,
+                          const gchar     *name,
+                          gpointer         user_data)
+{
+}
+
+/**
+ * bus_ibus_share_destroy:
+ *
+ * The destructor of BusIBusShare.
+ */
+static void
+bus_ibus_share_destroy (BusIBusShare *ibus)
+{
+    guint id = BUS_IBUS_SHARE_GET_CLASS(ibus)->id;
+    if (id != 0)
+        g_bus_unown_name (id);
+    BUS_IBUS_SHARE_GET_CLASS(ibus)->id = 0;
+    g_clear_pointer (&ibus->guid, g_free);
+}
+
+static void
+bus_ibus_share_class_init (BusIBusShareClass *class)
+{
+    GObjectClass *gobject_class = G_OBJECT_CLASS (class);
+
+    gobject_class->constructor = bus_ibus_share_constructor;
+
+    IBUS_OBJECT_CLASS (class)->destroy =
+            (IBusObjectDestroyFunc) bus_ibus_share_destroy;
+    IBUS_SERVICE_CLASS (class)->service_method_call =
+            bus_ibus_share_service_method_call;
+    IBUS_SERVICE_CLASS (class)->service_get_property =
+            bus_ibus_share_service_get_property;
+    IBUS_SERVICE_CLASS (class)->service_set_property =
+            bus_ibus_share_service_set_property;
+    ibus_service_class_add_interfaces (IBUS_SERVICE_CLASS (class),
+                                       introspection_shared_xml);
+}
+
+static void
+bus_ibus_share_init (BusIBusShare *ibus)
+{
+}
+
+static GObject *
+bus_ibus_share_constructor (GType                  type,
+                            guint                  n_params,
+                            GObjectConstructParam *params)
+{
+    GObject *object;
+    BusIBusShare *ibus;
+    guint id;
+    GError *error = NULL;
+    GDBusConnection *connection;
+
+    object = G_OBJECT_CLASS (bus_ibus_share_parent_class)->constructor (
+            type, n_params, params);
+    ibus = BUS_IBUS_SHARE (object);
+
+    id = BUS_IBUS_SHARE_GET_CLASS(ibus)->id;
+    if (id != 0)
+        g_bus_unown_name (id);
+
+    /* Use this constructor instaed of bus_ibus_share_init()
+     * so that ibus_service_register() can access service->priv->object_path
+     * below.
+     */
+    connection = g_bus_get_sync (G_BUS_TYPE_SESSION,
+                    NULL,
+                    &error);
+    if (!connection) {
+        g_error ("Could not get a shared bus: %s", error->message);
+    }
+    if (!ibus_service_register (IBUS_SERVICE (ibus), connection, &error)) {
+        g_warning ("Error: %s", error->message);
+        g_clear_pointer (&error, g_error_free);
+    }
+    /* Use g_bus_own_name_on_connection() instead of g_bus_own_name()
+     * because IBusBus provices both g_bus_get() in ibus_bus_new_async() and
+     * g_bus_get_sync() in ibus_bus_new() but g_bus_own_name() calls
+     * g_bus_get() only internally and ibus-dconf failed to get the connection
+     * due to a time lag.
+     * I.e. GBusAcquiredCallback in g_bus_own_name() is called too slowly
+     * to call ibus_service_register() in it.
+     */
+    BUS_IBUS_SHARE_GET_CLASS(ibus)->id = g_bus_own_name_on_connection (
+            connection,
+            IBUS_SERVICE_IBUS,
+            G_BUS_NAME_OWNER_FLAGS_NONE,
+            bus_ibus_share_name_acquired,
+            bus_ibus_share_name_lost,
+            g_object_ref (ibus),
+            g_object_unref);
+    ibus->guid = g_dbus_generate_guid ();
+
+    return object;
+}
+
+BusIBusShare *
+bus_ibus_share_get_default (void)
+{
+    static BusIBusShare *ibus = NULL;
+ 
+    if (ibus == NULL) {
+        ibus = (BusIBusShare *) g_object_new (BUS_TYPE_IBUS_SHARE,
+                                              "object-path",
+                                              IBUS_PATH_IBUS,
+                                              NULL);
+    }
+
+    return ibus;
+}
 
 static void
 bus_ibus_impl_class_init (BusIBusImplClass *class)
@@ -498,9 +686,77 @@ bus_ibus_impl_destroy (BusIBusImpl *ibus)
 }
 
 /**
+ * _ibus_get_fd
+ *
+ * Implement the "GetFD" method call of the @IBUS_INTERFACE_IBUS
+ * interface.
+ */
+static void
+_ibus_share_get_fd (BusIBusShare          *ibus,
+                    GVariant              *parameters,
+                    GDBusMethodInvocation *invocation)
+{
+#ifdef G_OS_UNIX
+    GDBusConnection *connection =
+            g_dbus_method_invocation_get_connection (invocation);
+    int sd;
+    GUnixFDList *fd_list;
+    GError *error = NULL;
+
+    if (g_dbus_connection_get_capabilities (connection) &
+        G_DBUS_CAPABILITY_FLAGS_UNIX_FD_PASSING) {
+        sd = bus_server_start_with_socketpair (ibus->guid);
+        fd_list = g_unix_fd_list_new ();
+        g_unix_fd_list_append (fd_list, sd, &error);
+        g_assert_no_error (error);
+        g_dbus_method_invocation_return_value_with_unix_fd_list (
+                invocation,
+                g_variant_new ("(s)", ibus->guid),
+                fd_list);
+        g_object_unref (fd_list);
+        return;
+    } else {
+        g_dbus_method_invocation_return_dbus_error (
+                invocation,
+                IBUS_INTERFACE_IBUS ".Failed",
+                "Your message bus daemon does not support file " \
+                        "descriptor passing (need D-Bus >= 1.3.0)");
+        return;
+    }
+#else
+    g_dbus_method_invocation_return_dbus_error (
+            invocation,
+            IBUS_INTERFACE_IBUS ".NotOnUnix",
+            "Your OS does not support file descriptor passing");
+    return;
+#endif
+}
+
+/**
+ * _ibus_set_sec_aid:
+ *
+ * Implement the "SecAid" method call of
+ * the @IBUS_INTERFACE_IBUS interface.
+ */
+static gboolean
+_ibus_set_sec_aid (BusIBusShare    *ibus,
+                   GDBusConnection *connection,
+                   GVariant        *value,
+                   GError         **error)
+{
+    if (error) {
+        *error = NULL;
+    }
+
+    ibus->aid = g_variant_dup_string (value, NULL);
+
+    return TRUE;
+}
+
+/**
  * _ibus_get_address:
  *
- * Implement the "Address" method call of the org.freedesktop.IBus interface.
+ * Implement the "Address" method call of the @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_address (BusIBusImpl     *ibus,
@@ -524,7 +780,7 @@ _ibus_get_address_depre (BusIBusImpl           *ibus,
     GError *error = NULL;
     GVariant *variant = NULL;
 
-    g_warning ("org.freedesktop.IBus.GetAddress() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".GetAddress() is deprecated!");
 
     variant = _ibus_get_address (ibus, connection, &error);
 
@@ -901,7 +1157,8 @@ bus_ibus_impl_create_input_context (BusIBusImpl   *ibus,
 /**
  * _ibus_create_input_context:
  *
- * Implement the "CreateInputContext" method call of the org.freedesktop.IBus interface.
+ * Implement the "CreateInputContext" method call of the @IBUS_INTERFACE_IBUS
+ * interface.
  */
 static void
 _ibus_create_input_context (BusIBusImpl           *ibus,
@@ -935,7 +1192,7 @@ _ibus_create_input_context (BusIBusImpl           *ibus,
  * _ibus_get_current_input_context:
  *
  * Implement the "CurrentInputContext" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_current_input_context (BusIBusImpl     *ibus,
@@ -970,7 +1227,7 @@ _ibus_current_input_context_depre (BusIBusImpl           *ibus,
     GVariant *variant = NULL;
     GError *error = NULL;
 
-    g_warning ("org.freedesktop.IBus.CurrentInputContext() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".CurrentInputContext() is deprecated!");
 
     variant = _ibus_get_current_input_context (ibus, connection, &error);
 
@@ -1016,7 +1273,7 @@ _component_destroy_cb (BusComponent *component,
  * _ibus_register_component:
  *
  * Implement the "RegisterComponent" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static void
 _ibus_register_component (BusIBusImpl           *ibus,
@@ -1073,7 +1330,7 @@ _ibus_register_component (BusIBusImpl           *ibus,
 /**
  * _ibus_get_engines:
  *
- * Implement the "Engines" method call of the org.freedesktop.IBus interface.
+ * Implement the "Engines" method call of the @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_engines (BusIBusImpl     *ibus,
@@ -1113,7 +1370,7 @@ _ibus_list_engines_depre (BusIBusImpl           *ibus,
     GError *error = NULL;
     GVariant *variant = NULL;
 
-    g_warning ("org.freedesktop.IBus.ListEngines() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".ListEngines() is deprecated!");
 
     variant = _ibus_get_engines (ibus, connection, &error);
 
@@ -1124,7 +1381,8 @@ _ibus_list_engines_depre (BusIBusImpl           *ibus,
 /**
  * _ibus_get_engines_by_names:
  *
- * Implement the "GetEnginesByNames" method call of the org.freedesktop.IBus interface.
+ * Implement the "GetEnginesByNames" method call of the @IBUS_INTERFACE_IBUS
+ * interface.
  */
 static void
 _ibus_get_engines_by_names (BusIBusImpl           *ibus,
@@ -1156,7 +1414,7 @@ _ibus_get_engines_by_names (BusIBusImpl           *ibus,
  * _ibus_get_active_engines:
  *
  * Implement the "ActiveEngines" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_active_engines (BusIBusImpl     *ibus,
@@ -1191,7 +1449,7 @@ _ibus_list_active_engines_depre (BusIBusImpl           *ibus,
     GError *error = NULL;
     GVariant *variant = NULL;
 
-    g_warning ("org.freedesktop.IBus.ListActiveEngines() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".ListActiveEngines() is deprecated!");
 
     variant = _ibus_get_active_engines (ibus, connection, &error);
 
@@ -1199,15 +1457,9 @@ _ibus_list_active_engines_depre (BusIBusImpl           *ibus,
                                            g_variant_new ("(@av)", variant));
 }
 
-/**
- * _ibus_exit:
- *
- * Implement the "Exit" method call of the org.freedesktop.IBus interface.
- */
 static void
-_ibus_exit (BusIBusImpl           *ibus,
-            GVariant              *parameters,
-            GDBusMethodInvocation *invocation)
+_ibus_exit_internal (GVariant              *parameters,
+                     GDBusMethodInvocation *invocation)
 {
     gboolean restart = FALSE;
     g_variant_get (parameters, "(b)", &restart);
@@ -1224,9 +1476,48 @@ _ibus_exit (BusIBusImpl           *ibus,
 }
 
 /**
+ * _ibus_share_exit:
+ *
+ * Implement the "Exit" method call of the @IBUS_INTERFACE_IBUS interface.
+ */
+static void
+_ibus_share_exit (BusIBusShare          *ibus,
+                  GVariant              *parameters,
+                  GDBusMethodInvocation *invocation)
+{
+    _ibus_exit_internal (parameters, invocation);
+}
+
+/**
+ * _ibus_exit:
+ *
+ * Implement the "Exit" method call of the @IBUS_INTERFACE_IBUS interface.
+ */
+static void
+_ibus_exit (BusIBusImpl           *ibus,
+            GVariant              *parameters,
+            GDBusMethodInvocation *invocation)
+{
+    _ibus_exit_internal (parameters, invocation);
+}
+
+/**
+ * _ibus_share_ping:
+ *
+ * Implement the "Ping" method call of the @IBUS_INTERFACE_IBUS interface.
+ */
+static void
+_ibus_share_ping (BusIBusShare          *ibus,
+                  GVariant              *parameters,
+                  GDBusMethodInvocation *invocation)
+{
+    g_dbus_method_invocation_return_value (invocation, parameters);
+}
+
+/**
  * _ibus_ping:
  *
- * Implement the "Ping" method call of the org.freedesktop.IBus interface.
+ * Implement the "Ping" method call of the @IBUS_INTERFACE_IBUS interface.
  */
 static void
 _ibus_ping (BusIBusImpl           *ibus,
@@ -1240,7 +1531,7 @@ _ibus_ping (BusIBusImpl           *ibus,
  * _ibus_get_use_sys_layout:
  *
  * Implement the "UseSysLayout" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_use_sys_layout (BusIBusImpl     *ibus,
@@ -1264,7 +1555,7 @@ _ibus_get_use_sys_layout_depre (BusIBusImpl           *ibus,
     GError *error = NULL;
     GVariant *variant = NULL;
 
-    g_warning ("org.freedesktop.IBus.GetUseSysLayout() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".GetUseSysLayout() is deprecated!");
 
     variant = _ibus_get_use_sys_layout (ibus, connection, &error);
 
@@ -1278,7 +1569,7 @@ _ibus_get_use_sys_layout_depre (BusIBusImpl           *ibus,
  * _ibus_get_use_global_engine:
  *
  * Implement the "UseGlobalEngine" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_use_global_engine (BusIBusImpl     *ibus,
@@ -1302,7 +1593,7 @@ _ibus_get_use_global_engine_depre (BusIBusImpl           *ibus,
     GError *error = NULL;
     GVariant *variant = NULL;
 
-    g_warning ("org.freedesktop.IBus.GetUseGlobalEngine() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".GetUseGlobalEngine() is deprecated!");
 
     variant = _ibus_get_use_global_engine (ibus, connection, &error);
 
@@ -1316,7 +1607,7 @@ _ibus_get_use_global_engine_depre (BusIBusImpl           *ibus,
  * _ibus_get_global_engine:
  *
  * Implement the "GlobalEngine" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_global_engine (BusIBusImpl     *ibus,
@@ -1363,7 +1654,7 @@ _ibus_get_global_engine_depre (BusIBusImpl           *ibus,
     GError *error = NULL;
     GVariant *variant = NULL;
 
-    g_warning ("org.freedesktop.IBus.GetGlobalEngine() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".GetGlobalEngine() is deprecated!");
 
     variant = _ibus_get_global_engine (ibus, connection, &error);
 
@@ -1431,7 +1722,7 @@ _ibus_set_global_engine_ready_cb (BusInputContext       *context,
  * _ibus_set_global_engine:
  *
  * Implement the "SetGlobalEngine" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static void
 _ibus_set_global_engine (BusIBusImpl           *ibus,
@@ -1477,7 +1768,7 @@ _ibus_set_global_engine (BusIBusImpl           *ibus,
  * _ibus_get_global_engine_enabled:
  *
  * Implement the "GlobalEngineEnabled" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_global_engine_enabled (BusIBusImpl     *ibus,
@@ -1516,7 +1807,7 @@ _ibus_is_global_engine_enabled_depre (BusIBusImpl           *ibus,
     GError *error = NULL;
     GVariant *variant = NULL;
 
-    g_warning ("org.freedesktop.IBus.IsGlobalEngineEnabled() is deprecated!");
+    g_warning (IBUS_INTERFACE_IBUS ".IsGlobalEngineEnabled() is deprecated!");
 
     variant = _ibus_get_global_engine_enabled (ibus, connection, &error);
 
@@ -1530,7 +1821,7 @@ _ibus_is_global_engine_enabled_depre (BusIBusImpl           *ibus,
  * _ibus_set_preload_engines:
  *
  * Implement the "PreloadEngines" method call of the
- * org.freedesktop.IBus interface.
+ * @IBUS_INTERFACE_IBUS interface.
  */
 static gboolean
 _ibus_set_preload_engines (BusIBusImpl     *ibus,
@@ -1601,7 +1892,7 @@ _ibus_set_preload_engines (BusIBusImpl     *ibus,
  * _ibus_get_embed_preedit_text:
  *
  * Implement the "EmbedPreeditText" method call of
- * the org.freedesktop.IBus interface.
+ * the @IBUS_INTERFACE_IBUS interface.
  */
 static GVariant *
 _ibus_get_embed_preedit_text (BusIBusImpl     *ibus,
@@ -1619,7 +1910,7 @@ _ibus_get_embed_preedit_text (BusIBusImpl     *ibus,
  * _ibus_set_embed_preedit_text:
  *
  * Implement the "EmbedPreeditText" method call of
- * the org.freedesktop.IBus interface.
+ * the @IBUS_INTERFACE_IBUS interface.
  */
 static gboolean
 _ibus_set_embed_preedit_text (BusIBusImpl     *ibus,
@@ -1641,10 +1932,130 @@ _ibus_set_embed_preedit_text (BusIBusImpl     *ibus,
 }
 
 /**
+ * bus_ibus_share_service_method_call:
+ *
+ * Handle a shared D-Bus method call whose destination and interface name are
+ * both @IBUS_INTERFACE_IBUS
+ */
+static void
+bus_ibus_share_service_method_call (IBusService           *service,
+                                    GDBusConnection       *connection,
+                                    const gchar           *sender,
+                                    const gchar           *object_path,
+                                    const gchar           *interface_name,
+                                    const gchar           *method_name,
+                                    GVariant              *parameters,
+                                    GDBusMethodInvocation *invocation)
+{
+    if (g_strcmp0 (interface_name, IBUS_INTERFACE_IBUS) != 0) {
+        IBUS_SERVICE_CLASS (bus_ibus_impl_parent_class)->service_method_call (
+                        service, connection, sender, object_path,
+                        interface_name, method_name,
+                        parameters, invocation);
+        return;
+    }
+
+    /* all methods in the xml definition above should be listed here. */
+    static const struct {
+        const gchar *method_name;
+        void (* method_callback) (BusIBusShare *,
+                                  GVariant *,
+                                  GDBusMethodInvocation *);
+        GDBusCapabilityFlags capabilities;
+    } methods [] =  {
+        /* IBus interface */
+        { "Exit",                       _ibus_share_exit, },
+        { "GetFD",                      _ibus_share_get_fd, },
+        { "Ping",                       _ibus_share_ping, }
+    };
+
+    gint i;
+    for (i = 0; i < G_N_ELEMENTS (methods); i++) {
+        if (g_strcmp0 (methods[i].method_name, method_name) == 0) {
+            methods[i].method_callback ((BusIBusShare *) service,
+                                        parameters,
+                                        invocation);
+            return;
+        }
+    }
+
+    g_warning ("service_method_call received an unknown method: %s",
+               method_name ? method_name : "(null)");
+}
+
+/**
+ * bus_ibus_share_service_get_property:
+ *
+ * Handle org.freedesktop.DBus.Properties.Get
+ */
+static GVariant *
+bus_ibus_share_service_get_property (IBusService     *service,
+                                     GDBusConnection *connection,
+                                     const gchar     *sender,
+                                     const gchar     *object_path,
+                                     const gchar     *interface_name,
+                                     const gchar     *property_name,
+                                     GError         **error)
+{
+    g_warning ("service_get_property received an unknown property: %s",
+               property_name ? property_name : "(null)");
+    return NULL;
+}
+
+/**
+ * bus_ibus_share_service_set_property:
+ *
+ * Handle org.freedesktop.DBus.Properties.Set
+ */
+static gboolean
+bus_ibus_share_service_set_property (IBusService     *service,
+                                     GDBusConnection *connection,
+                                     const gchar     *sender,
+                                     const gchar     *object_path,
+                                     const gchar     *interface_name,
+                                     const gchar     *property_name,
+                                     GVariant        *value,
+                                     GError         **error)
+{
+    gint i;
+
+    static const struct {
+        const gchar *method_name;
+        gboolean (* method_callback) (BusIBusShare *,
+                                      GDBusConnection *,
+                                      GVariant *,
+                                      GError **);
+    } methods [] =  {
+        { "SecAid",                _ibus_set_sec_aid }
+    };
+
+    if (g_strcmp0 (interface_name, IBUS_INTERFACE_IBUS) != 0) {
+        return IBUS_SERVICE_CLASS (
+                bus_ibus_impl_parent_class)->service_set_property (
+                        service, connection, sender, object_path,
+                        interface_name, property_name,
+                        value, error);
+    }
+
+    for (i = 0; i < G_N_ELEMENTS (methods); i++) {
+        if (g_strcmp0 (methods[i].method_name, property_name) == 0) {
+            return methods[i].method_callback ((BusIBusShare *) service,
+                                               connection,
+                                               value,
+                                               error);
+        }
+    }
+
+    g_warning ("service_set_property received an unknown property: %s",
+               property_name ? property_name : "(null)");
+    return FALSE;
+}
+
+/**
  * bus_ibus_impl_service_method_call:
  *
  * Handle a D-Bus method call whose destination and interface name are
- * both "org.freedesktop.IBus"
+ * both @IBUS_INTERFACE_IBUS
  */
 static void
 bus_ibus_impl_service_method_call (IBusService           *service,
@@ -2025,19 +2436,19 @@ bus_ibus_impl_property_changed (BusIBusImpl *service,
                                 GVariant    *value)
 {
     GDBusMessage *message =
-        g_dbus_message_new_signal ("/org/freedesktop/IBus",
+        g_dbus_message_new_signal (IBUS_PATH_IBUS,
                                    "org.freedesktop.DBus.Properties",
                                    "PropertiesChanged");
 
     /* set a non-zero serial to make libdbus happy */
     g_dbus_message_set_serial (message, 1);
-    g_dbus_message_set_sender (message, "org.freedesktop.IBus");
+    g_dbus_message_set_sender (message, IBUS_SERVICE_IBUS);
 
     GVariantBuilder *builder = g_variant_builder_new (G_VARIANT_TYPE_ARRAY);
     g_variant_builder_add (builder, "{sv}", property_name, value);
     g_dbus_message_set_body (message,
                              g_variant_new ("(sa{sv}as)",
-                                            "org.freedesktop.IBus",
+                                            IBUS_SERVICE_IBUS,
                                             builder,
                                             NULL));
     g_variant_builder_unref (builder);
@@ -2056,12 +2467,12 @@ bus_ibus_impl_emit_signal (BusIBusImpl *ibus,
                            const gchar *signal_name,
                            GVariant    *parameters)
 {
-    GDBusMessage *message = g_dbus_message_new_signal ("/org/freedesktop/IBus",
-                                                       "org.freedesktop.IBus",
+    GDBusMessage *message = g_dbus_message_new_signal (IBUS_PATH_IBUS,
+                                                       IBUS_SERVICE_IBUS,
                                                        signal_name);
     /* set a non-zero serial to make libdbus happy */
     g_dbus_message_set_serial (message, 1);
-    g_dbus_message_set_sender (message, "org.freedesktop.IBus");
+    g_dbus_message_set_sender (message, IBUS_SERVICE_IBUS);
     if (parameters)
         g_dbus_message_set_body (message, parameters);
     bus_dbus_impl_dispatch_message_by_rule (BUS_DEFAULT_DBUS, message, NULL);

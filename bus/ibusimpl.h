@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* bus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2013 Red Hat, Inc.
+ * Copyright (C) 2015-2017 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2017 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -35,6 +36,19 @@
  */
 
 /* define GOBJECT macros */
+#define BUS_TYPE_IBUS_SHARE            \
+    (bus_ibus_share_get_type ())
+#define BUS_IBUS_SHARE(obj)            \
+    (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUS_TYPE_IBUS_SHARE, BusIBusShare))
+#define BUS_IBUS_SHARE_CLASS(klass)    \
+    (G_TYPE_CHECK_CLASS_CAST ((klass), BUS_TYPE_IBUS_SHARE, BusIBusShareClass))
+#define BUS_IS_IBUS_SHARE(obj)         \
+    (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUS_TYPE_IBUS_SHARE))
+#define BUS_IS_IBUS_SHARE_CLASS(klass) \
+    (G_TYPE_CHECK_CLASS_TYPE ((klass), BUS_TYPE_IBUS_SHARE))
+#define BUS_IBUS_SHARE_GET_CLASS(obj)  \
+    (G_TYPE_INSTANCE_GET_CLASS ((obj), BUS_TYPE_IBUS_SHARE, BusIBusShareClass))
+
 #define BUS_TYPE_IBUS_IMPL             \
     (bus_ibus_impl_get_type ())
 #define BUS_IBUS_IMPL(obj)             \
@@ -55,10 +69,22 @@
 
 G_BEGIN_DECLS
 
+typedef struct _BusIBusShare BusIBusShare;
+typedef struct _BusIBusShareClass BusIBusShareClass;
 typedef struct _BusIBusImpl BusIBusImpl;
 typedef struct _BusIBusImplClass BusIBusImplClass;
 
+GType            bus_ibus_share_get_type            (void);
 GType            bus_ibus_impl_get_type             (void);
+
+/**
+ * bus_ibus_share_get_default:
+ * @returns: a BusIBusShare object which is a singleton.
+ *
+ * Instantiate a BusIBusShare object (if necessary) and return the object.
+ */
+BusIBusShare    *bus_ibus_share_get_default         (void);
+
 
 /**
  * bus_ibus_impl_get_default:
