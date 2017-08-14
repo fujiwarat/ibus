@@ -38,7 +38,6 @@ static BusIBusShare *server = NULL;
 static GMainLoop *mainloop = NULL;
 static BusDBusImpl *dbus = NULL;
 static BusIBusImpl *ibus = NULL;
-static gchar *address = NULL;
 static gboolean _restart = FALSE;
 
 static void
@@ -105,8 +104,6 @@ bus_server_init (void)
     bus_dbus_impl_register_object (dbus, (IBusService *)ibus);
 
     server = bus_ibus_share_get_default ();
-    address = g_strdup ("unix:abstract=/tmp/dbus-no-longer-used");
-    ibus_write_address (address);
 }
 
 int
@@ -148,7 +145,7 @@ bus_server_start_with_socketpair (const gchar *guid) {
 const gchar *
 bus_server_get_address (void)
 {
-    return address;
+    return NULL;
 }
 
 void
@@ -160,7 +157,13 @@ bus_server_run (void)
     mainloop = g_main_loop_new (NULL, FALSE);
     g_main_loop_run (mainloop);
 
+    ibus_object_destroy ((IBusObject *)dbus);
+    ibus_object_destroy ((IBusObject *)ibus);
+
+    /* release resources */
     ibus_object_destroy (IBUS_OBJECT (server));
+    g_main_loop_unref (mainloop);
+    mainloop = NULL;
 
     /* When _ibus_exit() is called, bus_ibus_impl_destroy() needs
      * to be called so that waitpid() prevents the processes from

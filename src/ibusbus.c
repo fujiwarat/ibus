@@ -54,8 +54,7 @@ enum {
 /* IBusBusPriv */
 struct _IBusBusPrivate {
     GFileMonitor *monitor;
-    GDBusConnection *shared_connection;
-    GDBusConnection *dedicated_connection;
+    GDBusConnection *connection;
     gboolean watch_dbus_signal;
     guint watch_dbus_signal_id;
     gboolean watch_ibus_signal;
@@ -107,8 +106,7 @@ static void      ibus_bus_get_property           (IBusBus                *bus,
                                                   GValue                 *value,
                                                   GParamSpec             *pspec);
 
-static void     ibus_bus_close_dedicated_connection
-                                                 (IBusBus                *bus);
+static void     ibus_bus_close_connection        (IBusBus                *bus);
 
 G_DEFINE_TYPE (IBusBus, ibus_bus, IBUS_TYPE_OBJECT)
 
@@ -277,11 +275,11 @@ _connection_closed_cb (GDBusConnection  *connection,
          * However we think the error message is almost harmless. */
         g_debug ("_connection_closed_cb: %s", error->message);
     }
-    ibus_bus_close_dedicated_connection (bus);
+    ibus_bus_close_connection (bus);
 }
 
 static void
-ibus_bus_close_dedicated_connection (IBusBus *bus)
+ibus_bus_close_connection (IBusBus *bus)
 {
     bus->priv->watch_dbus_signal_id = 0;
     bus->priv->watch_ibus_signal_id = 0;
@@ -293,15 +291,15 @@ ibus_bus_close_dedicated_connection (IBusBus *bus)
     g_cancellable_reset (bus->priv->cancellable);
 
     /* unref the old connection at first */
-    if (bus->priv->dedicated_connection != NULL) {
+    if (bus->priv->connection != NULL) {
         g_signal_handlers_disconnect_by_func (
-                bus->priv->dedicated_connection,
+                bus->priv->connection,
                 G_CALLBACK (_connection_closed_cb),
                 bus);
-        if (!g_dbus_connection_is_closed(bus->priv->dedicated_connection))
-            g_dbus_connection_close(bus->priv->dedicated_connection,
+        if (!g_dbus_connection_is_closed(bus->priv->connection))
+            g_dbus_connection_close(bus->priv->connection,
                                     NULL, NULL, NULL);
-        g_clear_pointer (&bus->priv->dedicated_connection, g_object_unref);
+        g_clear_pointer (&bus->priv->connection, g_object_unref);
         g_signal_emit (bus, bus_signals[DISCONNECTED], 0);
     }
 }
@@ -309,11 +307,11 @@ ibus_bus_close_dedicated_connection (IBusBus *bus)
 static void
 ibus_bus_connect_completed (IBusBus *bus)
 {
-    g_assert (bus->priv->dedicated_connection);
+    g_assert (bus->priv->connection);
     /* FIXME */
     ibus_bus_hello (bus);
 
-    g_signal_connect (bus->priv->dedicated_connection,
+    g_signal_connect (bus->priv->connection,
                       "closed",
                       (GCallback) _connection_closed_cb,
                       bus);
@@ -408,7 +406,7 @@ ibus_bus_elaborate_dedicated_connection_sync (IBusBus         *bus,
     g_object_unref (fd_list);
 
     /* Close current connection and cancel ongoing connect request. */
-    ibus_bus_close_dedicated_connection (bus);
+    ibus_bus_close_connection (bus);
 
     g_variant_get (result, "(s)", &bus->priv->guid);
     g_variant_unref (result);
@@ -418,7 +416,7 @@ ibus_bus_elaborate_dedicated_connection_sync (IBusBus         *bus,
     socket_connection = g_socket_connection_factory_create_connection (socket);
     g_assert (socket_connection != NULL);
     g_object_unref (socket);
-    bus->priv->dedicated_connection = g_dbus_connection_new_sync (
+    bus->priv->connection = g_dbus_connection_new_sync (
             G_IO_STREAM (socket_connection),
             bus->priv->guid,
             //G_DBUS_CONNECTION_FLAGS_NONE,
@@ -426,7 +424,7 @@ ibus_bus_elaborate_dedicated_connection_sync (IBusBus         *bus,
             NULL,
             NULL,
             &error);
-    if (!bus->priv->dedicated_connection) {
+    if (!bus->priv->connection) {
         g_warning ("Could not connect with a dedicated socket %d: %s",
         sd, error->message);
         g_clear_pointer (&error, g_error_free);
@@ -485,7 +483,7 @@ ibus_bus_connect (IBusBus *bus)
     GDBusConnection *connection = NULL;
     GError *error = NULL;
 
-    if (bus->priv->dedicated_connection != NULL)
+    if (bus->priv->connection != NULL)
         return;
 
     connection = g_bus_get_sync (
@@ -594,20 +592,14 @@ ibus_bus_destroy (IBusObject *object)
         bus->priv->config = NULL;
     }
 
-    if (bus->priv->shared_connection) {
-        /* FIXME should use async close function */
-        g_dbus_connection_close_sync (bus->priv->shared_connection, NULL, NULL);
-        g_clear_pointer (&bus->priv->shared_connection, g_object_unref);
-    }
-
-    if (bus->priv->dedicated_connection) {
-        g_signal_handlers_disconnect_by_func (bus->priv->dedicated_connection,
+    if (bus->priv->connection) {
+        g_signal_handlers_disconnect_by_func (bus->priv->connection,
                                               G_CALLBACK (_connection_closed_cb),
                                               bus);
         /* FIXME should use async close function */
-        g_dbus_connection_close_sync (bus->priv->dedicated_connection,
+        g_dbus_connection_close_sync (bus->priv->connection,
                                       NULL, NULL);
-        g_clear_pointer (&bus->priv->dedicated_connection, g_object_unref);
+        g_clear_pointer (&bus->priv->connection, g_object_unref);
     }
 
     if (bus->priv->cancellable) {
@@ -730,8 +722,8 @@ ibus_bus_is_connected (IBusBus *bus)
 {
     g_return_val_if_fail (IBUS_IS_BUS (bus), FALSE);
 
-    if (bus->priv->dedicated_connection == NULL ||
-        g_dbus_connection_is_closed (bus->priv->dedicated_connection))
+    if (bus->priv->connection == NULL ||
+        g_dbus_connection_is_closed (bus->priv->connection))
         return FALSE;
 
     return TRUE;
@@ -759,7 +751,7 @@ ibus_bus_create_input_context (IBusBus      *bus,
         GError *error = NULL;
         g_variant_get (result, "(&o)", &path);
         context = ibus_input_context_new (path,
-                                          bus->priv->dedicated_connection,
+                                          bus->priv->connection,
                                           NULL, &error);
         g_variant_unref (result);
         if (context == NULL) {
@@ -823,7 +815,7 @@ _create_input_context_async_step_one_done (GDBusConnection *connection,
     cancellable = g_task_get_cancellable (task);
 
     ibus_input_context_new_async (path,
-            bus->priv->dedicated_connection,
+            bus->priv->connection,
             cancellable,
             (GAsyncReadyCallback)_create_input_context_async_step_two_done,
             task);
@@ -851,7 +843,7 @@ ibus_bus_create_input_context_async (IBusBus            *bus,
      * 1. Call CreateInputContext to request ibus-daemon create a remote IC.
      * 2. New local IBusInputContext proxy of the remote IC
      */
-    g_dbus_connection_call (bus->priv->dedicated_connection,
+    g_dbus_connection_call (bus->priv->connection,
             IBUS_SERVICE_IBUS,
             IBUS_PATH_IBUS,
             IBUS_INTERFACE_IBUS,
@@ -962,12 +954,12 @@ ibus_bus_current_input_context_async_finish (IBusBus      *bus,
 static void
 ibus_bus_watch_dbus_signal (IBusBus *bus)
 {
-    g_return_if_fail (bus->priv->dedicated_connection != NULL);
+    g_return_if_fail (bus->priv->connection != NULL);
     g_return_if_fail (bus->priv->watch_dbus_signal_id == 0);
 
     /* Subscribe to dbus signals such as NameOwnerChanged. */
     bus->priv->watch_dbus_signal_id
-        = g_dbus_connection_signal_subscribe (bus->priv->dedicated_connection,
+        = g_dbus_connection_signal_subscribe (bus->priv->connection,
                                               DBUS_SERVICE_DBUS,
                                               DBUS_INTERFACE_DBUS,
                                               "NameOwnerChanged",
@@ -984,7 +976,7 @@ static void
 ibus_bus_unwatch_dbus_signal (IBusBus *bus)
 {
     g_return_if_fail (bus->priv->watch_dbus_signal_id != 0);
-    g_dbus_connection_signal_unsubscribe (bus->priv->dedicated_connection,
+    g_dbus_connection_signal_unsubscribe (bus->priv->connection,
                                           bus->priv->watch_dbus_signal_id);
     bus->priv->watch_dbus_signal_id = 0;
 }
@@ -1013,12 +1005,12 @@ ibus_bus_set_watch_dbus_signal (IBusBus        *bus,
 static void
 ibus_bus_watch_ibus_signal (IBusBus *bus)
 {
-    g_return_if_fail (bus->priv->dedicated_connection != NULL);
+    g_return_if_fail (bus->priv->connection != NULL);
     g_return_if_fail (bus->priv->watch_ibus_signal_id == 0);
 
     /* Subscribe to ibus signals such as GlboalEngineChanged. */
     bus->priv->watch_ibus_signal_id
-        = g_dbus_connection_signal_subscribe (bus->priv->dedicated_connection,
+        = g_dbus_connection_signal_subscribe (bus->priv->connection,
                                               "org.freedesktop.IBus",
                                               IBUS_INTERFACE_IBUS,
                                               "GlobalEngineChanged",
@@ -1035,7 +1027,7 @@ static void
 ibus_bus_unwatch_ibus_signal (IBusBus *bus)
 {
     g_return_if_fail (bus->priv->watch_ibus_signal_id != 0);
-    g_dbus_connection_signal_unsubscribe (bus->priv->dedicated_connection,
+    g_dbus_connection_signal_unsubscribe (bus->priv->connection,
                                           bus->priv->watch_ibus_signal_id);
     bus->priv->watch_ibus_signal_id = 0;
 }
@@ -1068,9 +1060,9 @@ ibus_bus_hello (IBusBus *bus)
     g_return_val_if_fail (ibus_bus_is_connected (bus), NULL);
 
     /* gdbus connection will say hello by self. */
-    if (bus->priv->dedicated_connection) {
+    if (bus->priv->connection) {
         return g_dbus_connection_get_unique_name (
-                bus->priv->dedicated_connection);
+                bus->priv->connection);
     }
     return NULL;
 }
@@ -1510,7 +1502,7 @@ ibus_bus_get_connection (IBusBus *bus)
 {
     g_return_val_if_fail (IBUS_IS_BUS (bus), NULL);
 
-    return bus->priv->dedicated_connection;
+    return bus->priv->connection;
 }
 
 gboolean
@@ -1528,7 +1520,7 @@ ibus_bus_exit (IBusBus *bus,
                                  g_variant_new ("(b)", restart),
                                  NULL);
 
-    ibus_bus_close_dedicated_connection (bus);
+    ibus_bus_close_connection (bus);
 
     if (result) {
         g_variant_unref (result);
@@ -1841,8 +1833,8 @@ ibus_bus_get_config (IBusBus *bus)
     IBusBusPrivate *priv;
     priv = IBUS_BUS_GET_PRIVATE (bus);
 
-    if (priv->config == NULL && priv->dedicated_connection) {
-        priv->config = ibus_config_new (priv->dedicated_connection, NULL, NULL);
+    if (priv->config == NULL && priv->connection) {
+        priv->config = ibus_config_new (priv->connection, NULL, NULL);
         if (priv->config) {
             g_signal_connect (priv->config, "destroy", G_CALLBACK (_config_destroy_cb), bus);
         }
@@ -2430,7 +2422,7 @@ ibus_bus_call_sync (IBusBus            *bus,
 
     GError *error = NULL;
     GVariant *result;
-    result = g_dbus_connection_call_sync (bus->priv->dedicated_connection,
+    result = g_dbus_connection_call_sync (bus->priv->connection,
                                           bus_name,
                                           path,
                                           interface,
@@ -2495,7 +2487,7 @@ ibus_bus_call_async (IBusBus            *bus,
     task = g_task_new (bus, cancellable, callback, user_data);
     g_task_set_source_tag (task, source_tag);
 
-    g_dbus_connection_call (bus->priv->dedicated_connection,
+    g_dbus_connection_call (bus->priv->connection,
                             bus_name,
                             path,
                             interface,
