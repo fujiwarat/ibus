@@ -41,6 +41,7 @@
 
 #include "ibusservice.h"
 #include "ibusattribute.h"
+#include "ibusinputcontext.h"
 #include "ibuslookuptable.h"
 #include "ibusproplist.h"
 
@@ -153,10 +154,16 @@ struct _IBusEngineClass {
                                     (IBusEngine     *engine,
                                      guint           purpose,
                                      guint           hints);
+    IBusInputContextEvent *
+                (* process_key_event_object)
+                                    (IBusEngine     *engine,
+                                     guint           keyval,
+                                     guint           keycode,
+                                     guint           state);
 
     /*< private >*/
     /* padding */
-    gpointer pdummy[4];
+    gpointer pdummy[2];
 };
 
 GType        ibus_engine_get_type       (void);

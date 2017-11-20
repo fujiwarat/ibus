@@ -30,6 +30,7 @@
    (G_TYPE_INSTANCE_GET_PRIVATE ((o), IBUS_TYPE_ENGINE, IBusEnginePrivate))
 
 enum {
+    PROCESS_KEY_EVENT_OBJECT,
     PROCESS_KEY_EVENT,
     FOCUS_IN,
     FOCUS_OUT,
@@ -116,6 +117,12 @@ static gboolean  ibus_engine_service_set_property
                                               const gchar        *property_name,
                                               GVariant           *value,
                                               GError            **error);
+static IBusInputContextEvent *
+                 ibus_engine_process_key_event_object
+                                             (IBusEngine         *engine,
+                                              guint               keyval,
+                                              guint               keycode,
+                                              guint               state);
 static gboolean  ibus_engine_process_key_event
                                              (IBusEngine         *engine,
                                               guint               keyval,
@@ -183,11 +190,11 @@ static const gchar introspection_xml[] =
     "<node>"
     "  <interface name='org.freedesktop.IBus.Engine'>"
     /* FIXME methods */
-    "    <method name='ProcessKeyEvent'>"
+    "    <method name='ProcessKeyEventObject'>"
     "      <arg direction='in'  type='u' name='keyval' />"
     "      <arg direction='in'  type='u' name='keycode' />"
     "      <arg direction='in'  type='u' name='state' />"
-    "      <arg direction='out' type='b' />"
+    "      <arg direction='out' type='v' />"
     "    </method>"
     "    <method name='SetCursorLocation'>"
     "      <arg direction='in'  type='i' name='x' />"
@@ -264,8 +271,32 @@ static const gchar introspection_xml[] =
     "    </signal>"
     /* FIXME properties */
     "    <property name='ContentType' type='(uu)' access='write' />"
+    "    <method name='ProcessKeyEvent'>"
+    "      <arg direction='in'  type='u' name='keyval' />"
+    "      <arg direction='in'  type='u' name='keycode' />"
+    "      <arg direction='in'  type='u' name='state' />"
+    "      <arg direction='out' type='b' />"
+    "    </method>"
     "  </interface>"
     "</node>";
+
+static gboolean
+_ibus_engine_process_key_event_object_accumulator (
+        GSignalInvocationHint *ihint,
+        GValue                *return_accu,
+        const GValue          *handler_return,
+        gpointer               dummy)
+{
+    gboolean retval = TRUE;
+    GObject *object = g_value_get_object (handler_return);
+
+    if (object != NULL) {
+        g_value_copy (handler_return, return_accu);
+        retval = FALSE;
+    }
+
+    return retval;
+}
 
 static void
 ibus_engine_class_init (IBusEngineClass *class)
@@ -284,6 +315,7 @@ ibus_engine_class_init (IBusEngineClass *class)
 
     ibus_service_class_add_interfaces (IBUS_SERVICE_CLASS (class), introspection_xml);
 
+    class->process_key_event_object = ibus_engine_process_key_event_object;
     class->process_key_event = ibus_engine_process_key_event;
     class->focus_in     = ibus_engine_focus_in;
     class->focus_out    = ibus_engine_focus_out;
@@ -323,6 +355,40 @@ ibus_engine_class_init (IBusEngineClass *class)
                         G_PARAM_STATIC_STRINGS));
 
     /* install signals */
+    /**
+     * IBusEngine::process-key-event-object:
+     * @engine: An IBusEngine.
+     * @keyval: Key symbol of the key press.
+     * @keycode: KeyCode of the key press.
+     * @state: Key modifier flags.
+     *
+     * Emitted when a key event is received.
+     * Implement the member function IBusEngineClass::process_key_event_object
+     * in extended class to receive this signal.
+     * Both the key symbol and keycode are passed to the member function.
+     * See ibus_input_context_process_key_event() for further explanation of
+     * key symbol, keycode and which to use.
+     * The @commit will have a string if the engine returned and the string
+     * will be sent to the application before the returned boolean is sent.
+     *
+     * Returns: an #IBusInputContextEvent
+     * See also:  ibus_input_context_process_key_event_object().
+     *
+     * <note><para>Argument @user_data is ignored in this function.</para></note>
+     */
+    engine_signals[PROCESS_KEY_EVENT_OBJECT] =
+        g_signal_new (I_("process-key-event-object"),
+            G_TYPE_FROM_CLASS (gobject_class),
+            G_SIGNAL_RUN_LAST,
+            G_STRUCT_OFFSET (IBusEngineClass, process_key_event_object),
+            _ibus_engine_process_key_event_object_accumulator, NULL,
+            _ibus_marshal_OBJECT__UINT_UINT_UINT,
+            IBUS_TYPE_INPUT_CONTEXT_EVENT,
+            3,
+            G_TYPE_UINT,
+            G_TYPE_UINT,
+            G_TYPE_UINT);
+
     /**
      * IBusEngine::process-key-event:
      * @engine: An IBusEngine.
@@ -876,10 +942,19 @@ ibus_engine_service_method_call (IBusService           *service,
         return;
     }
 
-    if (g_strcmp0 (method_name, "ProcessKeyEvent") == 0) {
+    if (!g_strcmp0 (method_name, "ProcessKeyEventObject") ||
+        !g_strcmp0 (method_name, "ProcessKeyEvent")) {
         guint keyval, keycode, state;
+        IBusInputContextEvent *event = NULL;
         gboolean retval = FALSE;
         g_variant_get (parameters, "(uuu)", &keyval, &keycode, &state);
+        g_signal_emit (engine,
+                       engine_signals[PROCESS_KEY_EVENT_OBJECT],
+                       0,
+                       keyval,
+                       keycode,
+                       state,
+                       &event);
         g_signal_emit (engine,
                        engine_signals[PROCESS_KEY_EVENT],
                        0,
@@ -887,7 +962,38 @@ ibus_engine_service_method_call (IBusService           *service,
                        keycode,
                        state,
                        &retval);
-        g_dbus_method_invocation_return_value (invocation, g_variant_new ("(b)", retval));
+        if (!g_strcmp0 (method_name, "ProcessKeyEventObject")) {
+            gboolean has_event = TRUE;
+            if (!event) {
+                has_event = FALSE;
+                event = ibus_input_context_event_new (
+                        "event-type", IC_EVENT_PROCESS_KEY_EVENT_RETURN,
+                        "retval", retval,
+                        NULL);
+            }
+            /* To register the capsulized "v" to GDBusInterfaceInfo
+             * instead of "a{bv}", need to run g_variant_new().
+             * Also the D-Bus method accepts the tuple varint only
+             * so g_varint_new_varint() cannot be used here.
+             */
+            g_dbus_method_invocation_return_value (
+                    invocation,
+                    g_variant_new ("(v)", ibus_serializable_serialize (
+                            (IBusSerializable *)event)));
+            if (!has_event)
+                g_object_unref (event);
+
+        } else {
+            g_warning ("ProcessKeyEvent D-Bus method is now deprecated. " \
+                       "Probably your ibus-daemon is old or you don't use " \
+                       "ibus-daemon.");
+            if (IBUS_IS_INPUT_CONTEXT_EVENT (event))
+                retval = ibus_input_context_event_get_retval (event);
+            g_dbus_method_invocation_return_value (invocation,
+                                                   g_variant_new ("(b)",
+                                                                  retval));
+        }
+
         return;
     }
 
@@ -1108,6 +1214,15 @@ ibus_engine_service_set_property (IBusService        *service,
     }
 
     g_return_val_if_reached (FALSE);
+}
+
+static IBusInputContextEvent *
+ibus_engine_process_key_event_object (IBusEngine *engine,
+                                      guint       keyval,
+                                      guint       keycode,
+                                      guint       state)
+{
+    return NULL;
 }
 
 static gboolean

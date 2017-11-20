@@ -41,6 +41,7 @@
  */
 #include "ibusproxy.h"
 #include "ibusenginedesc.h"
+#include "ibusserializable.h"
 #include "ibustext.h"
 
 /*
@@ -48,6 +49,10 @@
  */
 
 /* define GOBJECT macros */
+#define IBUS_TYPE_INPUT_CONTEXT_EVENT  \
+    (ibus_input_context_event_get_type ())
+#define IBUS_IS_INPUT_CONTEXT_EVENT(klass)  \
+    (G_TYPE_CHECK_INSTANCE_TYPE ((klass), IBUS_TYPE_INPUT_CONTEXT_EVENT))
 #define IBUS_TYPE_INPUT_CONTEXT             \
     (ibus_input_context_get_type ())
 #define IBUS_INPUT_CONTEXT(obj)             \
@@ -63,8 +68,28 @@
 
 G_BEGIN_DECLS
 
+typedef enum {
+    IC_EVENT_NONE,
+    IC_EVENT_PROCESS_KEY_EVENT_RETURN,
+} IBusInputContextEventType;
+
+typedef struct _IBusInputContextEvent IBusInputContextEvent;
+typedef struct _IBusInputContextEventClass IBusInputContextEventClass;
 typedef struct _IBusInputContext IBusInputContext;
 typedef struct _IBusInputContextClass IBusInputContextClass;
+
+/**
+ * IBusInputContextEvent:
+ *
+ * A serialized return object of "ProcessKeyEvent" D-Bus method.
+ */
+struct _IBusInputContextEvent {
+    IBusSerializable parent;
+};
+
+struct _IBusInputContextEventClass {
+    IBusSerializableClass parent;
+};
 
 /**
  * IBusInputContext:
@@ -85,7 +110,54 @@ struct _IBusInputContextClass {
     gpointer pdummy[24];
 };
 
+
+GType        ibus_input_context_event_get_type (void);
 GType        ibus_input_context_get_type    (void);
+
+/**
+ * ibus_input_context_event_new:
+ * @first_property_name: The first property name of #IBusInputContextEvent
+ *
+ * #IBusInputContextEvent is processed in the input contexts using D-Bus methods.
+ * E.g. ibus_input_context_process_key_event_variant() returns this type of
+ * the object. @first_property_name should include a "event-type" property.
+ * E.g. ibus_input_context_event_new("event-type", IC_EVENT_PROCESS_KEY_EVENT_RETURN,
+ * "retval", TRUE, NULL)
+ *
+ * Returns: A newly allocated #IBusInputContextEvent.
+ */
+IBusInputContextEvent *
+             ibus_input_context_event_new   (const gchar        *first_property_name,
+                                             ...);
+
+/**
+ * ibus_input_context_event_get_event_type:
+ * @event: #IBusInputContextEvent
+ *
+ * Returns: #IBusInputContextEventType.
+ */
+IBusInputContextEventType
+             ibus_input_context_event_get_event_type
+                                            (IBusInputContextEvent *event);
+
+/**
+ * ibus_input_context_event_get_retval:
+ * @event: #IBusInputContextEvent
+ *
+ * Returns: %TRUE if the event is processed by an engine. Otherwise %FALSE.
+ */
+gboolean     ibus_input_context_event_get_retval
+                                            (IBusInputContextEvent *event);
+
+/**
+ * ibus_input_context_event_get_committed_text:
+ * @event: #IBusInputContextEvent
+ *
+ * Returns: (transfer none): an #IBusText which includes a committed text
+ *          from an engine.
+ */
+IBusText *   ibus_input_context_event_get_committed_text
+                                            (IBusInputContextEvent *event);
 
 /**
  * ibus_input_context_new:
@@ -278,6 +350,27 @@ gboolean     ibus_input_context_process_key_event_async_finish
                                              GError            **error);
 
 /**
+ * ibus_input_context_process_key_event_obejct_async_finish:
+ * @context: An #IBusInputContext.
+ * @res: A #GAsyncResult obtained from the #GAsyncReadyCallback passed to
+ *      ibus_input_context_process_key_event_async().
+ * @error: Return location for error or %NULL.
+ *
+ * Finishes an operation started with
+ *      ibus_input_context_process_key_event_async().
+ *
+ * Returns: (transfer full): the #IBusInputContextEvent which includes
+ *          the returned boolean the commit string in case the engine returns.
+ *          The committed string will be sent to the application
+ *          before the returned boolean is sent.
+ */
+IBusInputContextEvent *
+             ibus_input_context_process_key_event_object_async_finish
+                                            (IBusInputContext   *context,
+                                             GAsyncResult       *res,
+                                             GError            **error);
+
+/**
  * ibus_input_context_process_key_event:
  * @context: An #IBusInputContext.
  * @keyval: Key symbol of a key event.
@@ -297,6 +390,30 @@ gboolean     ibus_input_context_process_key_event
                                              guint32             keycode,
                                              guint32             state);
 
+
+/**
+ * ibus_input_context_process_key_event_object:
+ * @context: An #IBusInputContext.
+ * @keyval: Key symbol of a key event.
+ * @keycode: Keycode of a key event.
+ * @state: Key modifier flags.
+ *
+ * Pass the key event to input method engine and wait for the reply from
+ * ibus (i.e. synchronous IPC). The returned #IBusInputContextEvent includes
+ * the returned boolean and the committed #IBusText. The committed #IBusText
+ * will be sent to the application before the returned boolean value is sent.
+ * This way works with this synchronous API for Korean.
+ *
+ * Returns: (transfer full): An #IBusInputContextEvent
+ *
+ * See also: ibus_input_context_process_key_event_async()
+ */
+IBusInputContextEvent *
+             ibus_input_context_process_key_event_object
+                                            (IBusInputContext   *context,
+                                             guint32             keyval,
+                                             guint32             keycode,
+                                             guint32             state);
 
 /**
  * ibus_input_context_set_cursor_location:

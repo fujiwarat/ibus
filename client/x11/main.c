@@ -454,10 +454,13 @@ _process_key_event_done (GObject      *object,
     IMForwardEventStruct *pfe = (IMForwardEventStruct*) user_data;
 
     GError *error = NULL;
-    gboolean retval = ibus_input_context_process_key_event_async_finish (
-            context,
-            res,
-            &error);
+    gboolean retval = FALSE;
+    IBusText *committed = NULL;
+    IBusInputContextEvent *ic_event =
+            ibus_input_context_process_key_event_object_async_finish (
+                    context,
+                    res,
+                    &error);
 
     if (error != NULL) {
         g_warning ("Process Key Event failed: %s.", error->message);
@@ -468,7 +471,25 @@ _process_key_event_done (GObject      *object,
                              GINT_TO_POINTER ((gint) pfe->connect_id))
         == NULL) {
         g_slice_free (IMForwardEventStruct, pfe);
+        g_object_unref (ic_event);
         return;
+    }
+
+    if (IBUS_IS_INPUT_CONTEXT_EVENT (ic_event)) {
+        retval = ibus_input_context_event_get_retval (ic_event);
+        committed = ibus_input_context_event_get_committed_text (ic_event);
+        if (IBUS_IS_TEXT (committed))
+            g_object_ref_sink (committed);
+        g_object_unref (ic_event);
+    }
+    if (IBUS_IS_TEXT (committed)) {
+        if (*committed->text != '\0') {
+            X11IC x11ic = { 0, };
+            x11ic.icid = pfe->icid;
+            x11ic.connect_id = pfe->connect_id;
+            _context_commit_text_cb (context, committed, &x11ic);
+        }
+        g_object_unref (committed);
     }
 
     if (retval == FALSE) {
@@ -505,11 +526,25 @@ xim_forward_event (XIMS xims, IMForwardEventStruct *call_data)
     }
 
     if (_use_sync_mode) {
-        retval = ibus_input_context_process_key_event (
+        IBusInputContextEvent *ic_event;
+        IBusText *committed = NULL;
+        ic_event = ibus_input_context_process_key_event_object (
                                       x11ic->context,
                                       event.keyval,
                                       event.hardware_keycode - 8,
                                       event.state);
+        if (IBUS_IS_INPUT_CONTEXT_EVENT (ic_event)) {
+            retval = ibus_input_context_event_get_retval (ic_event);
+            committed = ibus_input_context_event_get_committed_text (ic_event);
+            if (IBUS_IS_TEXT (committed))
+                g_object_ref_sink (committed);
+            g_object_unref (ic_event);
+        }
+        if (IBUS_IS_TEXT (committed)) {
+           if (*committed->text != '\0')
+                _context_commit_text_cb (x11ic->context, committed, x11ic);
+            g_object_unref (committed);
+        }
         if (retval) {
             if (! x11ic->has_preedit_area) {
                 _xim_set_cursor_location (x11ic);

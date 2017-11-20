@@ -223,6 +223,12 @@ static const gchar introspection_xml[] =
     "      <arg direction='in'  type='u' name='state' />"
     "      <arg direction='out' type='b' name='handled' />"
     "    </method>"
+    "    <method name='ProcessKeyEventObject'>"
+    "      <arg direction='in'  type='u' name='keyval' />"
+    "      <arg direction='in'  type='u' name='keycode' />"
+    "      <arg direction='in'  type='u' name='state' />"
+    "      <arg direction='out' type='v' name='return' />"
+    "    </method>"
     "    <method name='SetCursorLocation'>"
     "      <arg direction='in' type='i' name='x' />"
     "      <arg direction='in' type='i' name='y' />"
@@ -773,7 +779,8 @@ _ic_process_key_event_reply_cb (GObject               *source,
 /**
  * _ic_process_key_event:
  *
- * Implement the "ProcessKeyEvent" method call of the org.freedesktop.IBus.InputContext interface.
+ * Implement the "ProcessKeyEventObject" method call of the
+ * org.freedesktop.IBus.InputContext interface.
  */
 static void
 _ic_process_key_event  (BusInputContext       *context,
@@ -834,7 +841,15 @@ _ic_process_key_event  (BusInputContext       *context,
                                             invocation);
     }
     else {
-        g_dbus_method_invocation_return_value (invocation, g_variant_new ("(b)", FALSE));
+        IBusInputContextEvent *event = ibus_input_context_event_new (
+                "event-type", IC_EVENT_PROCESS_KEY_EVENT_RETURN,
+                "retval", FALSE,
+                NULL);
+        g_dbus_method_invocation_return_value (
+            invocation,
+            g_variant_new ("(v)", ibus_serializable_serialize ((
+                    IBusSerializable *)event)));
+        g_object_unref (event);
     }
 }
 
@@ -1180,6 +1195,7 @@ bus_input_context_service_method_call (IBusService            *service,
         const gchar *method_name;
         void (* method_callback) (BusInputContext *, GVariant *, GDBusMethodInvocation *);
     } methods [] =  {
+        { "ProcessKeyEventObject", _ic_process_key_event },
         { "ProcessKeyEvent",   _ic_process_key_event },
         { "SetCursorLocation", _ic_set_cursor_location },
         { "SetCursorLocationRelative", _ic_set_cursor_location_relative },

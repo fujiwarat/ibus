@@ -21,6 +21,7 @@
  */
 #include "ibusinputcontext.h"
 #include <gio/gio.h>
+#include "ibusenumtypes.h"
 #include "ibusshare.h"
 #include "ibusinternal.h"
 #include "ibusmarshalers.h"
@@ -29,8 +30,21 @@
 #include "ibusproplist.h"
 #include "ibuserror.h"
 
-#define IBUS_INPUT_CONTEXT_GET_PRIVATE(o)  \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), IBUS_TYPE_INPUT_CONTEXT, IBusInputContextPrivate))
+#define IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE(o)                         \
+   (G_TYPE_INSTANCE_GET_PRIVATE ((o),                                   \
+    IBUS_TYPE_INPUT_CONTEXT_EVENT,                                      \
+    IBusInputContextEventPrivate))
+#define IBUS_INPUT_CONTEXT_GET_PRIVATE(o)                               \
+   (G_TYPE_INSTANCE_GET_PRIVATE ((o),                                   \
+    IBUS_TYPE_INPUT_CONTEXT,                                            \
+    IBusInputContextPrivate))
+
+enum {
+    PROP_0 = 0,
+    PROP_EVENT_TYPE,
+    PROP_RETVAL,
+    PROP_COMMITTED_TEXT
+};
 
 enum {
     ENABLED,
@@ -56,6 +70,12 @@ enum {
     LAST_SIGNAL,
 };
 
+struct _IBusInputContextEventPrivate {
+    IBusInputContextEventType  event_type;
+    gboolean                   retval;
+    IBusText                  *committed_text;
+};
+
 /* IBusInputContextPrivate */
 struct _IBusInputContextPrivate {
     /* TRUE if the current engine needs surrounding text; FALSE otherwise */
@@ -68,6 +88,7 @@ struct _IBusInputContextPrivate {
     guint     selection_anchor_pos;
 };
 
+typedef struct _IBusInputContextEventPrivate IBusInputContextEventPrivate;
 typedef struct _IBusInputContextPrivate IBusInputContextPrivate;
 
 static guint            context_signals[LAST_SIGNAL] = { 0 };
@@ -75,13 +96,347 @@ static guint            context_signals[LAST_SIGNAL] = { 0 };
 static IBusText *text_empty = NULL;
 
 /* functions prototype */
-static void     ibus_input_context_real_destroy (IBusProxy              *context);
-static void     ibus_input_context_g_signal     (GDBusProxy             *proxy,
-                                                 const gchar            *sender_name,
-                                                 const gchar            *signal_name,
-                                                 GVariant               *parameters);
+static void     ibus_input_context_event_set_property
+                                                (IBusInputContextEvent
+                                                                   *event,
+                                                 guint              prop_id,
+                                                 const GValue      *value,
+                                                 GParamSpec        *pspec);
+static void     ibus_input_context_event_get_property
+                                                (IBusInputContextEvent
+                                                                   *event,
+                                                 guint              prop_id,
+                                                 GValue            *value,
+                                                 GParamSpec        *pspec);
+static gboolean ibus_input_context_event_serialize
+                                                (IBusInputContextEvent
+                                                                   *event,
+                                                 GVariantBuilder   *builder);
+static gint     ibus_input_context_event_deserialize
+                                                (IBusInputContextEvent
+                                                                   *event,
+                                                 GVariant          *variant);
+static gint     ibus_input_context_event_copy   (IBusInputContextEvent
+                                                                   *dest,
+                                                 const IBusInputContextEvent
+                                                                   *src);
+static void     ibus_input_context_event_destroy (IBusInputContextEvent
+                                                                   *event);
+static void     ibus_input_context_event_set_retval
+                                                  (IBusInputContextEvent
+                                                                   *event,
+                                                   gboolean         retval);
+static void     ibus_input_context_event_set_committed_text
+                                                  (IBusInputContextEvent
+                                                                   *event,
+                                                   IBusText        *committed_text);
+static void     ibus_input_context_real_destroy (IBusProxy         *context);
+static void     ibus_input_context_g_signal     (GDBusProxy        *proxy,
+                                                 const gchar       *sender_name,
+                                                 const gchar       *signal_name,
+                                                 GVariant          *parameters);
 
+G_DEFINE_TYPE (IBusInputContextEvent,
+               ibus_input_context_event,
+               IBUS_TYPE_SERIALIZABLE)
 G_DEFINE_TYPE (IBusInputContext, ibus_input_context, IBUS_TYPE_PROXY)
+
+
+static void
+ibus_input_context_event_class_init (IBusInputContextEventClass *class)
+{
+    GObjectClass *gobject_class = G_OBJECT_CLASS (class);
+    IBusObjectClass *object_class = IBUS_OBJECT_CLASS (class);
+    IBusSerializableClass *serializable_class = IBUS_SERIALIZABLE_CLASS (class);
+
+    g_type_class_add_private (class, sizeof (IBusInputContextEventPrivate));
+
+    gobject_class->set_property = (GObjectSetPropertyFunc)
+            ibus_input_context_event_set_property;
+    gobject_class->get_property = (GObjectGetPropertyFunc)
+            ibus_input_context_event_get_property;
+    object_class->destroy = (IBusObjectDestroyFunc)
+            ibus_input_context_event_destroy;
+    serializable_class->serialize =(IBusSerializableSerializeFunc)
+            ibus_input_context_event_serialize;
+    serializable_class->deserialize = (IBusSerializableDeserializeFunc)
+            ibus_input_context_event_deserialize;
+    serializable_class->copy = (IBusSerializableCopyFunc)
+            ibus_input_context_event_copy;
+
+    /* install properties */
+    /**
+     * IBusInputContextEvent:event-type:
+     *
+     * The type of the event
+     */
+    g_object_class_install_property (gobject_class,
+            PROP_EVENT_TYPE,
+            g_param_spec_enum("event-type",
+                    "event-type",
+                    "The type of the event",
+                    IBUS_TYPE_INPUT_CONTEXT_EVENT_TYPE,
+                    IC_EVENT_NONE,
+                    G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+
+
+    /**
+     * IBusInputContextEvent:retval:
+     *
+     * The retval of the event
+     */
+    g_object_class_install_property (gobject_class,
+            PROP_RETVAL,
+            g_param_spec_boolean("retval",
+                    "retval",
+                    "The retval of the event",
+                    FALSE,
+                    G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+
+    /**
+     * IBusInputContextEvent:committed-text:
+     *
+     * The committed text of the event
+     */
+    g_object_class_install_property (gobject_class,
+            PROP_COMMITTED_TEXT,
+            g_param_spec_object("committed-text",
+                    "committed text",
+                    "The committed text of the event",
+                    IBUS_TYPE_TEXT,
+                    G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+}
+
+static void
+ibus_input_context_event_init (IBusInputContextEvent *event)
+{
+}
+
+static void
+ibus_input_context_event_set_property (IBusInputContextEvent *event,
+                                       guint                  prop_id,
+                                       const GValue          *value,
+                                       GParamSpec            *pspec)
+{
+    IBusInputContextEventPrivate *priv;
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+
+    switch (prop_id) {
+    case PROP_EVENT_TYPE:
+        g_assert (priv->event_type == IC_EVENT_NONE);
+        priv->event_type = g_value_get_enum (value);
+        break;
+    case PROP_RETVAL:
+        g_assert (priv->retval == FALSE);
+        ibus_input_context_event_set_retval (event,
+                                             g_value_get_boolean (value));
+        break;
+    case PROP_COMMITTED_TEXT:
+        g_assert (priv->committed_text == NULL);
+        ibus_input_context_event_set_committed_text (event,
+                                                     g_value_get_object (value));
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (event, prop_id, pspec);
+    }
+}
+
+static void
+ibus_input_context_event_get_property (IBusInputContextEvent *event,
+                                       guint                  prop_id,
+                                       GValue                *value,
+                                       GParamSpec            *pspec)
+{
+    switch (prop_id) {
+    case PROP_EVENT_TYPE:
+        g_value_set_enum (value, ibus_input_context_event_get_event_type (event));
+        break;
+    case PROP_RETVAL:
+        g_value_set_boolean (value, ibus_input_context_event_get_retval (event));
+        break;
+    case PROP_COMMITTED_TEXT:
+        g_value_set_object (value,
+                            ibus_input_context_event_get_committed_text (event));
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (event, prop_id, pspec);
+    }
+}
+
+static void
+ibus_input_context_event_destroy (IBusInputContextEvent *event)
+{
+    IBusInputContextEventPrivate *priv;
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+
+    if (priv->committed_text)
+        g_clear_object (&priv->committed_text);
+
+    IBUS_OBJECT_CLASS (ibus_input_context_event_parent_class)->destroy (
+            (IBusObject *)event);
+}
+
+static gboolean
+ibus_input_context_event_serialize (IBusInputContextEvent *event,
+                                    GVariantBuilder       *builder)
+{
+    gboolean retval;
+    IBusInputContextEventPrivate *priv;
+
+    retval = IBUS_SERIALIZABLE_CLASS (
+            ibus_input_context_event_parent_class)->serialize (
+                    (IBusSerializable *) event, builder);
+    g_return_val_if_fail (retval, FALSE);
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+
+    g_variant_builder_add (builder, "b", priv->retval);
+    g_variant_builder_add (builder, "v", ibus_serializable_serialize (
+            (IBusSerializable *)priv->committed_text));
+
+    return TRUE;
+}
+
+static gint
+ibus_input_context_event_deserialize (IBusInputContextEvent *event,
+                                      GVariant              *variant)
+{
+    GVariant *subvar;
+    IBusInputContextEventPrivate *priv;
+    gint retval = IBUS_SERIALIZABLE_CLASS (
+            ibus_input_context_event_parent_class)->deserialize (
+                    (IBusSerializable *) event, variant);
+    g_return_val_if_fail (retval, 0);
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+
+    g_variant_get_child (variant, retval++, "b", &priv->retval);
+    subvar = g_variant_get_child_value (variant, retval++);
+    if (priv->committed_text != NULL) {
+        g_object_unref (priv->committed_text);
+    }
+    priv->committed_text = IBUS_TEXT (ibus_serializable_deserialize (subvar));
+    g_object_ref_sink (priv->committed_text);
+    g_variant_unref (subvar);
+
+    return retval;
+}
+
+static gboolean
+ibus_input_context_event_copy (IBusInputContextEvent       *dest,
+                               const IBusInputContextEvent *src)
+{
+    IBusInputContextEventPrivate *priv_dest;
+    IBusInputContextEventPrivate *priv_src;
+    gboolean retval = IBUS_SERIALIZABLE_CLASS (
+            ibus_input_context_event_parent_class)->copy (
+                    (IBusSerializable *) dest, (IBusSerializable *) src);
+    g_return_val_if_fail (retval, FALSE);
+
+    g_return_val_if_fail (IBUS_IS_INPUT_CONTEXT_EVENT (dest), FALSE);
+    g_return_val_if_fail (IBUS_IS_INPUT_CONTEXT_EVENT (src), FALSE);
+
+
+    priv_dest = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (dest);
+    priv_src = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (src);
+
+    priv_dest->retval = priv_src->retval;
+    if (priv_src->committed_text) {
+        priv_dest->committed_text = (IBusText *) ibus_serializable_copy (
+                (IBusSerializable *) priv_src->committed_text);
+    } else {
+        priv_dest->committed_text = ibus_text_new_from_static_string ("");
+    }
+
+    return TRUE;
+}
+
+IBusInputContextEvent *
+ibus_input_context_event_new (const gchar *first_property_name, ...)
+{
+    va_list var_args;
+    IBusInputContextEvent *event;
+    IBusInputContextEventPrivate *priv;
+
+    g_assert (first_property_name);
+
+    va_start (var_args, first_property_name);
+    event = (IBusInputContextEvent *) g_object_new_valist (
+            IBUS_TYPE_INPUT_CONTEXT_EVENT,
+            first_property_name,
+            var_args);
+    va_end (var_args);
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+    g_assert (priv->event_type != IC_EVENT_NONE);
+
+    return event;
+}
+
+IBusInputContextEventType
+ibus_input_context_event_get_event_type (IBusInputContextEvent *event)
+{
+    IBusInputContextEventPrivate *priv;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT_EVENT (event));
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+    return priv->event_type;
+}
+
+gboolean
+ibus_input_context_event_get_retval (IBusInputContextEvent *event)
+{
+    IBusInputContextEventPrivate *priv;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT_EVENT (event));
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+    return priv->retval;
+}
+
+static void
+ibus_input_context_event_set_retval (IBusInputContextEvent *event,
+                                     gboolean               retval)
+{
+    IBusInputContextEventPrivate *priv;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT_EVENT (event));
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+    priv->retval = retval;
+}
+
+IBusText *
+ibus_input_context_event_get_committed_text (IBusInputContextEvent *event)
+{
+    IBusInputContextEventPrivate *priv;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT_EVENT (event));
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+    return priv->committed_text;
+}
+
+static void
+ibus_input_context_event_set_committed_text (IBusInputContextEvent *event,
+                                             IBusText              *committed)
+{
+    IBusInputContextEventPrivate *priv;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT_EVENT (event));
+    g_assert (committed == NULL || IBUS_IS_TEXT (committed));
+
+    priv = IBUS_INPUT_CONTEXT_EVENT_GET_PRIVATE (event);
+    if (priv->committed_text)
+        g_object_unref (priv->committed_text);
+    if (committed == NULL)
+        priv->committed_text = ibus_text_new_from_static_string ("");
+    else
+        priv->committed_text = committed;
+    g_object_ref_sink (priv->committed_text);
+}
 
 static void
 ibus_input_context_class_init (IBusInputContextClass *class)
@@ -871,7 +1226,7 @@ ibus_input_context_process_key_event_async (IBusInputContext   *context,
     g_assert (IBUS_IS_INPUT_CONTEXT (context));
 
     g_dbus_proxy_call ((GDBusProxy *) context,
-                       "ProcessKeyEvent",                   /* method_name */
+                       "ProcessKeyEventObject",             /* method_name */
                        g_variant_new ("(uuu)",
                             keyval, keycode, state),        /* parameters */
                        G_DBUS_CALL_FLAGS_NONE,              /* flags */
@@ -882,25 +1237,84 @@ ibus_input_context_process_key_event_async (IBusInputContext   *context,
                        );
 }
 
+IBusInputContextEvent *
+ibus_input_context_process_key_event_object_async_finish (
+        IBusInputContext  *context,
+        GAsyncResult      *res,
+        GError           **error)
+{
+    GVariant *variant;
+    IBusInputContextEvent *event = NULL;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT (context));
+    g_assert (G_IS_ASYNC_RESULT (res));
+    g_assert (error == NULL || *error == NULL);
+
+    variant = g_dbus_proxy_call_finish ((GDBusProxy *) context, res, error);
+    if (variant) {
+        GVariant *child = NULL;
+        g_variant_get (variant, "(v)", &child);
+        event = (IBusInputContextEvent *)
+                ibus_serializable_deserialize (child);
+        g_variant_unref (child);
+        g_variant_unref (variant);
+    }
+
+    return event;
+}
+
 gboolean
 ibus_input_context_process_key_event_async_finish (IBusInputContext  *context,
                                                    GAsyncResult      *res,
                                                    GError           **error)
 {
-    g_assert (IBUS_IS_INPUT_CONTEXT (context));
-    g_assert (G_IS_ASYNC_RESULT (res));
-    g_assert (error == NULL || *error == NULL);
-
     gboolean processed = FALSE;
 
-    GVariant *variant = g_dbus_proxy_call_finish ((GDBusProxy *) context,
-                                                   res, error);
-    if (variant != NULL) {
-        g_variant_get (variant, "(b)", &processed);
-        g_variant_unref (variant);
+    IBusInputContextEvent *event =
+            ibus_input_context_process_key_event_object_async_finish (
+                    context,
+                    res,
+                    error);
+
+    if (IBUS_IS_INPUT_CONTEXT_EVENT (event)) {
+        processed = ibus_input_context_event_get_retval (event);
+        g_object_unref (event);
     }
 
     return processed;
+}
+
+IBusInputContextEvent *
+ibus_input_context_process_key_event_object (IBusInputContext *context,
+                                             guint32           keyval,
+                                             guint32           keycode,
+                                             guint32           state)
+{
+    GVariant *variant;
+    IBusInputContextEvent *event = NULL;
+
+    g_assert (IBUS_IS_INPUT_CONTEXT (context));
+
+    variant = g_dbus_proxy_call_sync (
+            (GDBusProxy *) context,
+            "ProcessKeyEventObject",        /* method_name */
+            g_variant_new ("(uuu)",
+                    keyval, keycode, state),/* parameters */
+            G_DBUS_CALL_FLAGS_NONE,         /* flags */
+            -1,                             /* timeout */
+            NULL,                           /* cancellable */
+            NULL);
+
+    if (variant) {
+        GVariant *child = NULL;
+        g_variant_get (variant, "(v)", &child);
+        event = (IBusInputContextEvent *)
+                ibus_serializable_deserialize (child);
+        g_variant_unref (child);
+        g_variant_unref (variant);
+    }
+
+    return event;
 }
 
 gboolean
@@ -909,22 +1323,16 @@ ibus_input_context_process_key_event (IBusInputContext *context,
                                       guint32           keycode,
                                       guint32           state)
 {
-    g_assert (IBUS_IS_INPUT_CONTEXT (context));
+    IBusInputContextEvent *event = ibus_input_context_process_key_event_object (
+            context,
+            keyval,
+            keycode,
+            state);
 
-    GVariant *result = g_dbus_proxy_call_sync ((GDBusProxy *) context,
-                            "ProcessKeyEvent",              /* method_name */
-                            g_variant_new ("(uuu)",
-                                 keyval, keycode, state),   /* parameters */
-                            G_DBUS_CALL_FLAGS_NONE,         /* flags */
-                            -1,                             /* timeout */
-                            NULL,                           /* cancellable */
-                            NULL);
-
-    if (result != NULL) {
+    if (IBUS_IS_INPUT_CONTEXT_EVENT (event)) {
         gboolean processed = FALSE;
-
-        g_variant_get (result, "(b)", &processed);
-        g_variant_unref (result);
+        processed = ibus_input_context_event_get_retval (event);
+        g_object_unref (event);
         return processed;
     }
 

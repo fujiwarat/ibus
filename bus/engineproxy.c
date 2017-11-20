@@ -966,7 +966,7 @@ bus_engine_proxy_process_key_event (BusEngineProxy      *engine,
     }
 
     g_dbus_proxy_call ((GDBusProxy *)engine,
-                       "ProcessKeyEvent",
+                       "ProcessKeyEventObject",
                        g_variant_new ("(uuu)", keyval, keycode, state),
                        G_DBUS_CALL_FLAGS_NONE,
                        -1,
