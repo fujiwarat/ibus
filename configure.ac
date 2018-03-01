@@ -688,6 +688,34 @@ the UCD files from https://www.unicode.org/Public/UNIDATA/)
     enable_unicode_dict="yes (enabled, use --disable-unicode-dict to disable)"
 fi
 
+AC_ARG_ENABLE(harfbuzz-for-emoji,
+    AS_HELP_STRING([--enable-harfbuzz-for-emoji],
+                   [Enable HarBuzz to draw emoji characters.
+                    Current Pango has a problem to draw emoji variants and
+                    this way enables to use HarfBuzz directly in GtkLabel.]),
+    [enable_harfbuzz_for_emoji=$enableval],
+    [enable_harfbuzz_for_emoji=no]
+)
+AM_CONDITIONAL([ENABLE_HARFBUZZ_FOR_EMOJI],
+               [test x"$enable_harfbuzz_for_emoji" = x"yes"])
+
+if test x"$enable_harfbuzz_for_emoji" = x"yes"; then
+    PKG_CHECK_MODULES(CAIRO, [
+        cairo
+    ])
+    PKG_CHECK_MODULES(FONTCONFIG, [
+        fontconfig
+    ])
+    PKG_CHECK_MODULES(HARFBUZZ, [
+        harfbuzz
+    ])
+    PKG_CHECK_MODULES(PANGO, [
+        pango
+    ])
+else
+    enable_harfbuzz_for_emoji="no (disabled, use --enable-harfbuzz-for-emoji to enable)"
+fi
+
 # Check iso-codes.
 PKG_CHECK_MODULES(ISOCODES, [
     iso-codes
@@ -780,6 +808,7 @@ Build options:
   CLDR annotation directory     $EMOJI_ANNOTATION_DIR
   Enable Unicode dict           $enable_unicode_dict
   UCD directory                 $UCD_DIR
+  Enable HarfBuzz for Emoji     $enable_harfbuzz_for_emoji
   Run test cases                $enable_tests
 ])
 

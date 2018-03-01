@@ -159,6 +159,8 @@ EXTRA_DIST =                            \
     extension.vala                      \
     gtkextension.xml.in                 \
     gtkpanel.xml.in                     \
+    ibusfontset.c                       \
+    ibusfontset.h                       \
     notification-item.xml               \
     notification-watcher.xml            \
     ibus-ui-emojier.desktop.in.in       \
@@ -248,6 +250,40 @@ panelbinding.o: $(srcdir)/panelbinding.c
 	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
 	$(AM_V_CC_no)$(COMPILE) -c -o $@ $<
 	$(NULL)
+
+if ENABLE_HARFBUZZ_FOR_EMOJI
+ibus_ui_gtk3_SOURCES +=                         \
+    ibusfontset.c                               \
+    $(NULL)
+
+ibus_ui_emojier_SOURCES +=                      \
+    ibusfontset.c                               \
+    $(NULL)
+
+ibus_extension_gtk3_SOURCES +=                  \
+    ibusfontset.c                               \
+    $(NULL)
+
+AM_CFLAGS += \
+    @CAIRO_CFLAGS@                              \
+    @FONTCONFIG_CFLAGS@                         \
+    @HARFBUZZ_CFLAGS@                           \
+    $(NULL)
+
+AM_LDADD += \
+    @CAIRO_LIBS@                                \
+    @FONTCONFIG_LIBS@                           \
+    @HARFBUZZ_LIBS@                             \
+    $(NULL)
+
+AM_VALAFLAGS += \
+    -D ENABLE_HARFBUZZ_FOR_EMOJI                \
+    --pkg=cairo                                 \
+    --pkg=ibus-fontset-1.0                      \
+    $(NULL)
+
+endif
+# end of ENABLE_HARFBUZZ_FOR_EMOJI
 
 man_seven_files = $(man_seven_in_files:.7.in=.7)
 man_seven_DATA =$(man_seven_files:.7=.7.gz)

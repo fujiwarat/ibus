@@ -83,8 +83,10 @@ EXTRA_DIST =                                    \
     IBus-1.0.metadata                           \
     IBus-1.0-custom.vala                        \
     IBusEmojiDialog-1.0.metadata                \
+    IBusFontSet-1.0.metadata                    \
     ibus-1.0.deps                               \
     ibus-emoji-dialog-1.0.deps                  \
+    ibus-fontset-1.0.deps                       \
     config.vapi                                 \
     xi.vapi                                     \
     $(NULL)
@@ -131,6 +133,15 @@ libibus_emoji_dialog_1_0_la_LDFLAGS =           \
 	if test ! -f $@ ; then                                              \
 	    $(LN_S) $(top_srcdir)/ui/gtk3/$@ .;                             \
 	fi;
+ibusfontset.c: $(ibus_vapi) ibusfontset.h
+	if test ! -f $@ ; then                                              \
+	    $(LN_S) $(top_srcdir)/ui/gtk3/$@ .;                             \
+	fi;
+ibusfontset.h: $(ibus_vapi)
+	if test ! -f $@ ; then                                              \
+	    $(LN_S) $(top_srcdir)/ui/gtk3/$@ .;                             \
+	fi;
+
 
 MAINTAINERCLEANFILES += $(libibus_emoji_dialog_1_0_la_SOURCES)
 DISTCLEANFILES += $(libibus_emoji_dialog_1_0_la_SOURCES)
@@ -184,6 +195,78 @@ DISTCLEANFILES += $(ibus_emoji_dialog_vapi)
 
 endif
 #end of HAVE_INTROSPECTION
+
+
+if ENABLE_HARFBUZZ_FOR_EMOJI
+libibus_fontset = libibus-fontset-1.0.la
+noinst_LTLIBRARIES += $(libibus_fontset)
+
+libibus_fontset_1_0_la_SOURCES =                \
+    ibusfontset.c                               \
+    $(NULL)
+libibus_fontset_1_0_la_CFLAGS =                 \
+    $(AM_CFLAGS)                                \
+    @CAIRO_CFLAGS@                              \
+    @FONTCONFIG_CFLAGS@                         \
+    @GLIB2_CFLAGS@                              \
+    @HARFBUZZ_CFLAGS@                           \
+    @PANGO_CFLAGS@                              \
+    $(NULL)
+libibus_fontset_1_0_la_LIBADD =                 \
+    @CAIRO_LIBS@                                \
+    @FONTCONFIG_LIBS@                           \
+    @GLIB2_LIBS@                                \
+    @HARFBUZZ_LIBS@                             \
+    @PANGO_LIBS@                                \
+    $(NULL)
+libibus_fontset_1_0_la_LDFLAGS =                \
+    -no-undefined                               \
+    -export-symbols-regex "ibus_.*"             \
+    $(NULL)
+
+MAINTAINERCLEANFILES += ibusfontset.c ibusfontset.h
+DISTCLEANFILES += ibusfontset.c ibusfontset.h
+
+if HAVE_INTROSPECTION
+IBusFontSet-1.0.gir: $(libibus_fontset) Makefile
+IBusFontSet_1_0_gir_SCANNERFLAGS =              \
+    --pkg-export=ibus-1.0                       \
+    --pkg=cairo                                 \
+    --pkg=fontconfig                            \
+    --pkg=harfbuzz                              \
+    $(IBUS_GIR_SCANNERFLAGS)                    \
+    $(NULL)
+IBusFontSet_1_0_gir_LIBS = $(libibus_fontset) $(libibus)
+IBusFontSet_1_0_gir_INCLUDES = cairo-1.0 GLib-2.0 GObject-2.0
+IBusFontSet_1_0_gir_FILES =                     \
+    ibusfontset.h                               \
+    $(NULL)
+IBusFontSet_1_0_gir_CFLAGS =                    \
+    -I$(srcdir)                                 \
+    -I$(builddir)                               \
+    -I$(top_srcdir)/src                         \
+    $(NULL)
+ibus_fontset_gir = IBusFontSet-1.0.gir
+INTROSPECTION_GIRS += $(ibus_fontset_gir)
+noinst_DATA += $(ibus_fontset_gir)
+EXTRA_DIST += $(ibus_fontset_gir)
+MAINTAINERCLEANFILES += $(ibus_fontset_gir)
+DISTCLEANFILES += $(ibus_fontset_gir)
+
+ibus-fontset-1.0.vapi: $(ibus_fontset_gir) IBusFontSet-1.0.metadata
+ibus_fontset_vapi = ibus-fontset-1.0.vapi
+ibus_fontset_1_0_vapi_METADATADIRS = $(srcdir)
+ibus_fontset_1_0_vapi_FILES = IBusFontSet-1.0.gir
+VAPIGEN_VAPIS += $(ibus_fontset_vapi)
+noinst_DATA += $(ibus_fontset_vapi)
+EXTRA_DIST += $(ibus_fontset_vapi)
+MAINTAINERCLEANFILES += $(ibus_fontset_vapi)
+DISTCLEANFILES += $(ibus_fontset_vapi)
+
+endif
+# end of HAVE_INTROSPECTION
+endif
+# end of ENABLE_HARFBUZZ_FOR_EMOJI
 endif
 # end of ENABLE_EMOJI_DICT
 

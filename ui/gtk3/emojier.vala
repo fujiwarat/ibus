@@ -99,16 +99,103 @@ public class IBusEmojier : Gtk.ApplicationWindow {
         }
     }
     private class EWhiteLabel : Gtk.Label {
+#if ENABLE_HARFBUZZ_FOR_EMOJI
+        private IBus.RequisitionEx m_requisition;
+#else
         private int m_minimum_width = 0;
         private int m_natural_width = 0;
         private int m_minimum_height = 0;
         private int m_natural_height = 0;
+#endif
         public EWhiteLabel(string text) {
             GLib.Object(
                 name : "IBusEmojierWhiteLabel"
             );
             set_label(text);
         }
+#if ENABLE_HARFBUZZ_FOR_EMOJI
+        private void get_preferred_size_with_hb(out int minimum_width,
+                                                out int natural_width,
+                                                out int minimum_height,
+                                                out int natural_height) {
+            minimum_width = 0;
+            natural_width = 0;
+            minimum_height = 0;
+            natural_height = 0;
+            var text = this.get_text();
+            GLib.return_if_fail (text != null);
+            if (text == "")
+                return;
+            var context = this.get_pango_context();
+            var language = context.get_language();
+            update_fontset(language);
+            Cairo.RectangleInt widest = Cairo.RectangleInt();
+            m_requisition = m_fontset.get_preferred_size_hb(text, out widest);
+            minimum_width = widest.width;
+            natural_width = widest.width;
+            minimum_height = widest.height;
+            natural_height = widest.height;
+            if (minimum_width <= minimum_height)
+                natural_width = minimum_width = minimum_height;
+            if (text.length == 1) {
+                switch(text.get_char()) {
+                case '\t':
+                    natural_width = minimum_width = minimum_height;
+                    break;
+                case '\v':
+                    natural_height = minimum_height = minimum_width;
+                    break;
+                }
+            }
+        }
+        public override void get_preferred_width(out int minimum_width,
+                                                 out int natural_width) {
+            get_preferred_size_with_hb(out minimum_width,
+                                       out natural_width,
+                                       null, null);
+        }
+        public override void get_preferred_height(out int minimum_height,
+                                                  out int natural_height) {
+            get_preferred_size_with_hb(null, null,
+                                       out minimum_height,
+                                       out natural_height);
+        }
+        public override bool draw(Cairo.Context cr) {
+            var style_context = get_style_context();
+            Gtk.Allocation allocation;
+            get_allocation(out allocation);
+            style_context.render_background(cr,
+                                            0, 0,
+                                            allocation.width,
+                                            allocation.height);
+            if (m_fontset == null)
+                return true;
+            if (m_requisition == null)
+                return true;
+            if (m_requisition.cairo_lines == null)
+                return true;
+            Gdk.RGBA *normal_fg = null;
+            style_context.get(Gtk.StateFlags.NORMAL,
+                              "color",
+                              out normal_fg);
+            cr.set_operator(Cairo.Operator.OVER);
+            cr.set_source_rgba(normal_fg.red, normal_fg.green, normal_fg.blue,
+                               normal_fg.alpha);
+            cr.save();
+            double x = 0.0;
+            double y = 0.0;
+            if (allocation.width > m_requisition.width)
+                x = (allocation.width - m_requisition.width) / 2.0;
+            if (allocation.height > m_requisition.height)
+                y = (allocation.height - m_requisition.height) / 2.0;
+            cr.translate(x, y);
+            m_fontset.draw_cairo_with_requisition_ex(cr, m_requisition);
+            cr.restore();
+            normal_fg.free();
+            normal_fg = null;
+            return true;
+        }
+#else
         public override void get_preferred_width(out int minimum_width,
                                                  out int natural_width) {
             if (m_minimum_height == 0 && m_natural_height == 0) {
@@ -161,6 +248,7 @@ public class IBusEmojier : Gtk.ApplicationWindow {
             m_minimum_height = minimum_height;
             m_natural_height = natural_height;
         }
+#endif
     }
     private class ESelectedLabel : EWhiteLabel {
         public ESelectedLabel(string text) {
@@ -313,6 +401,9 @@ public class IBusEmojier : Gtk.ApplicationWindow {
     private static bool m_show_unicode = false;
     private static LoadProgressObject m_unicode_progress_object;
     private static bool m_loaded_unicode = false;
+#if ENABLE_HARFBUZZ_FOR_EMOJI
+    private static IBus.FontSet m_fontset;
+#endif
 
     private ThemedRGBA m_rgba;
     private Gtk.Box m_vbox;
@@ -2116,6 +2207,22 @@ public class IBusEmojier : Gtk.ApplicationWindow {
     }
 
 
+#if ENABLE_HARFBUZZ_FOR_EMOJI
+    private static void update_fontset(Pango.Language language) {
+        if (m_fontset != null) {
+            m_fontset.set_family(m_emoji_font_family);
+            m_fontset.set_size(m_emoji_font_size);
+            m_fontset.set_language(language.to_string());
+            m_fontset.update_fcfontset();
+        } else {
+            m_fontset = new IBus.FontSet.with_font(
+                    m_emoji_font_family,
+                    m_emoji_font_size,
+                    language.to_string());
+        }
+    }
+#endif
+
     public static bool has_loaded_emoji_dict() {
         if (m_emoji_to_data_dict == null)
             return false;
@@ -2146,6 +2253,10 @@ public class IBusEmojier : Gtk.ApplicationWindow {
         int font_size = font_desc.get_size() / Pango.SCALE;
         if (font_size != 0)
             m_emoji_font_size = font_size;
+#if ENABLE_HARFBUZZ_FOR_EMOJI
+        var widget = new Gtk.Label("");
+        update_fontset(widget.get_pango_context().get_language());
+#endif
     }
 
 
