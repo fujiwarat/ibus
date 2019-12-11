@@ -2,8 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2015-2018 Takao Fujiwara <takao.fujiwara1@gmail.com>
- * Copyright (C) 2008-2018 Red Hat, Inc.
+ * Copyright (C) 2015-2019 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2019 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -96,6 +96,9 @@ static gboolean _use_sync_mode = FALSE;
 
 static const gchar *_discard_password_apps  = "";
 static gboolean _use_discard_password = FALSE;
+
+static const gchar *_auto_commit_apps  = AUTO_PREEDIT_COMMIT_APPS;
+static gboolean _use_auto_commit = FALSE;
 
 static GtkIMContext *_focus_im_context = NULL;
 static IBusInputContext *_fake_context = NULL;
@@ -636,6 +639,7 @@ ibus_im_context_class_init (IBusIMContextClass *class)
                                           !(ENABLE_SNOOPER));
     _use_sync_mode = _get_boolean_env ("IBUS_ENABLE_SYNC_MODE", FALSE);
     _use_discard_password = _get_boolean_env ("IBUS_DISCARD_PASSWORD", FALSE);
+    _use_auto_commit = _get_boolean_env ("IBUS_AUTO_PREEDIT_COMMIT", FALSE);
 
 #define CHECK_APP_IN_CSV_ENV_VARIABLES(retval,                          \
                                        env_apps,                        \
@@ -670,6 +674,12 @@ ibus_im_context_class_init (IBusIMContextClass *class)
         CHECK_APP_IN_CSV_ENV_VARIABLES (_use_discard_password,
                                         IBUS_DISCARD_PASSWORD_APPS,
                                         _discard_password_apps,
+                                        TRUE);
+    }
+    if (!_use_auto_commit) {
+        CHECK_APP_IN_CSV_ENV_VARIABLES (_use_auto_commit,
+                                        IBUS_AUTO_PREEDIT_COMMIT_APPS,
+                                        _auto_commit_apps,
                                         TRUE);
     }
 
@@ -896,9 +906,23 @@ ibus_im_context_clear_preedit_text (IBusIMContext *ibusimcontext)
                                           IBUS_ENGINE_PREEDIT_CLEAR,
                                           ibusimcontext);
     if (preedit_string) {
-        g_signal_emit (ibusimcontext, _signal_commit_id, 0, preedit_string);
+        /* Firefox no longer connect "button-press-event" but uses
+         * GtkGestureMultiPress in GtkWindowPrivate and connects "pressed"
+         * instead and do not propagate the event with "button-press-event".
+         * We don't commit the preedit text in the client here for the
+         * workaround and let firefox commit the preedit text to avoid the
+         * double preedit text with mouse click.
+         * After we fix the GTK reset signal to always emit the reset signal
+         * with mouse click, also will try to fix the Firefox
+         * reset signal so that ibus clients receive the signal before Firefox
+         * composes the preedit text because the options of commit, clear,
+         * keep depends on each IBus engine but Firefox cannot know each engine.
+         */
+        if (!_use_auto_commit) {
+            g_signal_emit (ibusimcontext, _signal_commit_id, 0, preedit_string);
+            _request_surrounding_text (ibusimcontext);
+        }
         g_free (preedit_string);
-        _request_surrounding_text (ibusimcontext);
     }
 }
 

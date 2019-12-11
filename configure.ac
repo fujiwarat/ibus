@@ -540,6 +540,16 @@ AC_ARG_WITH(no-snooper-apps,
 AC_DEFINE_UNQUOTED(NO_SNOOPER_APPS, "$NO_SNOOPER_APPS",
     [Does not enbale keyboard snooper in those applications])
 
+# Option for auto-preedit-commit applications.
+AC_ARG_WITH(auto-preedit-commit-apps,
+    AS_HELP_STRING([--with-auto-preedit-commit-apps[=regex1,regex2]],
+        [Applications have auto-commit of preedit with mouse click (like: .*chrome.*,firefox.*)]),
+    AUTO_PREEDIT_COMMIT_APPS=$with_auto_preedit_commit_apps,
+    AUTO_PREEDIT_COMMIT_APPS=[firefox.*,.*chrome.*,.*chromium.*]
+)
+AC_DEFINE_UNQUOTED(AUTO_PREEDIT_COMMIT_APPS, "$AUTO_PREEDIT_COMMIT_APPS",
+    [Applications have auto-commit of preedit with mouse click])
+
 # GNOME 3 uses the theme's icon.
 AC_ARG_WITH(panel-icon-keyboard,
     AS_HELP_STRING([--with-panel-icon-keyboard[=icon_name]],
@@ -812,7 +822,8 @@ Build options:
   Build UI                      $enable_ui
   Build engine                  $enable_engine
   Enable key snooper            $enable_key_snooper
-  No snooper regexes            "$NO_SNOOPER_APPS"
+  No snooper apps               "$NO_SNOOPER_APPS"
+  Auto preedit commit apps      "$AUTO_PREEDIT_COMMIT_APPS"
   Panel icon                    "$IBUS_ICON_KEYBOARD"
   Enable surrounding-text       $enable_surrounding_text
   Enable Emoji dict             $enable_emoji_dict
