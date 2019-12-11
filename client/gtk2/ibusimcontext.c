@@ -72,8 +72,6 @@ struct _IBusIMContext {
     /* cancellable */
     GCancellable    *cancellable;
     GQueue          *events_queue;
-
-    gboolean use_button_press_event;
 };
 
 struct _IBusIMContextClass {
@@ -1095,13 +1093,7 @@ ibus_im_context_reset (GtkIMContext *context)
     IBusIMContext *ibusimcontext = IBUS_IM_CONTEXT (context);
 
     if (ibusimcontext->ibuscontext) {
-        /* Commented out ibus_im_context_clear_preedit_text().
-         * Hangul needs to receive the reset callback with button press
-         * but other IMEs should avoid to receive the reset callback
-         * by themselves.
-         * IBus uses button-press-event instead until GTK is fixed.
-         * https://gitlab.gnome.org/GNOME/gtk/issues/1534
-         */
+        ibus_im_context_clear_preedit_text (ibusimcontext);
         ibus_input_context_reset (ibusimcontext->ibuscontext);
     }
     gtk_im_context_reset (ibusimcontext->slave);
@@ -1148,49 +1140,6 @@ ibus_im_context_get_preedit_string (GtkIMContext   *context,
 }
 
 
-#if !GTK_CHECK_VERSION (3, 93, 0)
-static gboolean
-ibus_im_context_button_press_event_cb (GtkWidget      *widget,
-                                       GdkEventButton *event,
-                                       IBusIMContext  *ibusimcontext)
-{
-    if (event->button != 1)
-        return FALSE;
-
-    if (ibusimcontext->ibuscontext) {
-        ibus_im_context_clear_preedit_text (ibusimcontext);
-        ibus_input_context_reset (ibusimcontext->ibuscontext);
-    }
-    return FALSE;
-}
-
-static void
-_connect_button_press_event (IBusIMContext *ibusimcontext,
-                             gboolean       do_connect)
-{
-    GtkWidget *widget = NULL;
-
-    g_assert (ibusimcontext->client_window);
-    gdk_window_get_user_data (ibusimcontext->client_window,
-                              (gpointer *)&widget);
-    /* firefox needs GtkWidget instead of GtkWindow */
-    if (GTK_IS_WIDGET (widget)) {
-        if (do_connect) {
-            g_signal_connect (
-                    widget,
-                    "button-press-event",
-                    G_CALLBACK (ibus_im_context_button_press_event_cb),
-                    ibusimcontext);
-        } else {
-            g_signal_handlers_disconnect_by_func (
-                    widget,
-                    G_CALLBACK (ibus_im_context_button_press_event_cb),
-                    ibusimcontext);
-        }
-    }
-}
-#endif
-
 static void
 ibus_im_context_set_client_window (GtkIMContext *context, GdkWindow *client)
 {
@@ -1201,21 +1150,12 @@ ibus_im_context_set_client_window (GtkIMContext *context, GdkWindow *client)
     ibusimcontext = IBUS_IM_CONTEXT (context);
 
     if (ibusimcontext->client_window) {
-#if !GTK_CHECK_VERSION (3, 93, 0)
-        if (ibusimcontext->use_button_press_event)
-            _connect_button_press_event (ibusimcontext, FALSE);
-#endif
         g_object_unref (ibusimcontext->client_window);
         ibusimcontext->client_window = NULL;
     }
 
-    if (client != NULL) {
+    if (client != NULL)
         ibusimcontext->client_window = g_object_ref (client);
-#if !GTK_CHECK_VERSION (3, 93, 0)
-        if (ibusimcontext->use_button_press_event)
-            _connect_button_press_event (ibusimcontext, TRUE);
-#endif
-    }
     if (ibusimcontext->slave)
         gtk_im_context_set_client_window (ibusimcontext->slave, client);
 }
@@ -1677,18 +1617,6 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
     if (ibusimcontext->preedit_attrs) {
         pango_attr_list_unref (ibusimcontext->preedit_attrs);
         ibusimcontext->preedit_attrs = NULL;
-    }
-
-    if (!ibusimcontext->use_button_press_event &&
-        mode == IBUS_ENGINE_PREEDIT_COMMIT) {
-#if !GTK_CHECK_VERSION (3, 93, 0)
-        if (ibusimcontext->client_window) {
-            _connect_button_press_event (ibusimcontext, TRUE);
-            ibusimcontext->use_button_press_event = TRUE;
-        }
-#else
-        ibusimcontext->use_button_press_event = TRUE;
-#endif
     }
 
     str = text->text;
