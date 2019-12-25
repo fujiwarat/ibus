@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2013 Red Hat, Inc.
+ * Copyright (C) 2010-2019 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2019 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -153,10 +154,16 @@ struct _IBusEngineClass {
                                     (IBusEngine     *engine,
                                      guint           purpose,
                                      guint           hints);
+    void        (* focus_in_with_path)
+                                    (IBusEngine     *engine,
+                                     const gchar    *object_path);
+    void        (* focus_out_with_path)
+                                    (IBusEngine     *engine,
+                                     const gchar    *object_path);
 
     /*< private >*/
     /* padding */
-    gpointer pdummy[4];
+    gpointer pdummy[2];
 };
 
 GType        ibus_engine_get_type       (void);

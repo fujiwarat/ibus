@@ -2,7 +2,7 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2018 Takao Fujiwara <takao.fujiwara@gmail.com>
+ * Copyright (C) 2018-2019 Takao Fujiwara <takao.fujiwara@gmail.com>
  * Copyright (C) 2008-2018 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
@@ -126,20 +126,24 @@ void            bus_engine_proxy_set_cursor_location
 /**
  * bus_engine_proxy_focus_in:
  * @engine: A #BusEngineProxy.
+ * @object_path: An object path.
  *
  * Call "FocusIn" method of an engine asynchronously. Do nothing if
  * the engine already has a focus.
  */
-void            bus_engine_proxy_focus_in    (BusEngineProxy     *engine);
+void            bus_engine_proxy_focus_in    (BusEngineProxy     *engine,
+                                              const gchar        *object_path);
 
 /**
  * bus_engine_proxy_focus_out:
  * @engine: A #BusEngineProxy.
+ * @object_path: An object path.
  *
  * Call "FocusOut" method of an engine asynchronously. Do nothing if
  * the engine does not have a focus.
  */
-void            bus_engine_proxy_focus_out   (BusEngineProxy     *engine);
+void            bus_engine_proxy_focus_out   (BusEngineProxy     *engine,
+                                              const gchar        *object_path);
 
 /**
  * bus_engine_proxy_reset:

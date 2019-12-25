@@ -2,7 +2,7 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2014 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2015-2018 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2015-2019 Takao Fujiwara <takao.fujiwara1@gmail.com>
  * Copyright (C) 2008-2016 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
@@ -1438,7 +1438,9 @@ bus_input_context_focus_in (BusInputContext *context)
     context->prev_modifiers = 0;
 
     if (context->engine) {
-        bus_engine_proxy_focus_in (context->engine);
+        const gchar *path =
+                ibus_service_get_object_path ((IBusService *)context);
+        bus_engine_proxy_focus_in (context->engine, path);
         bus_engine_proxy_enable (context->engine);
         bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
         bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);
@@ -1538,7 +1540,9 @@ bus_input_context_focus_out (BusInputContext *context)
     bus_input_context_register_properties (context, props_empty);
 
     if (context->engine) {
-        bus_engine_proxy_focus_out (context->engine);
+        const gchar *path =
+                ibus_service_get_object_path ((IBusService *)context);
+        bus_engine_proxy_focus_out (context->engine, path);
     }
 
     context->has_focus = FALSE;
@@ -2351,6 +2355,8 @@ bus_input_context_new (BusConnection    *connection,
 void
 bus_input_context_enable (BusInputContext *context)
 {
+    const gchar *path;
+
     g_assert (BUS_IS_INPUT_CONTEXT (context));
 
     if (!context->has_focus) {
@@ -2376,7 +2382,8 @@ bus_input_context_enable (BusInputContext *context)
     if (context->engine == NULL)
         return;
 
-    bus_engine_proxy_focus_in (context->engine);
+    path = ibus_service_get_object_path ((IBusService *)context);
+    bus_engine_proxy_focus_in (context->engine, path);
     bus_engine_proxy_enable (context->engine);
     bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
     bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);
@@ -2397,7 +2404,9 @@ bus_input_context_disable (BusInputContext *context)
     bus_input_context_register_properties (context, props_empty);
 
     if (context->engine) {
-        bus_engine_proxy_focus_out (context->engine);
+        const gchar *path =
+                ibus_service_get_object_path ((IBusService *)context);
+        bus_engine_proxy_focus_out (context->engine, path);
         bus_engine_proxy_disable (context->engine);
     }
 }
@@ -2445,6 +2454,7 @@ bus_input_context_unset_engine (BusInputContext *context)
 
     if (context->engine) {
         gint i;
+        const gchar *path;
         /* uninstall signal handlers for the engine. */
         for (i = 0; i < G_N_ELEMENTS(engine_signals); i++) {
             g_signal_handlers_disconnect_by_func (context->engine,
@@ -2453,7 +2463,8 @@ bus_input_context_unset_engine (BusInputContext *context)
         /* focus out engine so that the next call of
            bus_engine_proxy_focus_in() will take effect and trigger
            RegisterProperties. */
-        bus_engine_proxy_focus_out (context->engine);
+        path = ibus_service_get_object_path ((IBusService *)context);
+        bus_engine_proxy_focus_out (context->engine, path);
         g_object_unref (context->engine);
         context->engine = NULL;
     }
@@ -2477,6 +2488,7 @@ bus_input_context_set_engine (BusInputContext *context,
     }
     else {
         gint i;
+        const gchar *path;
         context->engine = engine;
         g_object_ref (context->engine);
 
@@ -2488,7 +2500,8 @@ bus_input_context_set_engine (BusInputContext *context,
                               context);
         }
         if (context->has_focus) {
-            bus_engine_proxy_focus_in (context->engine);
+            path = ibus_service_get_object_path ((IBusService *)context);
+            bus_engine_proxy_focus_in (context->engine, path);
             bus_engine_proxy_enable (context->engine);
             bus_engine_proxy_set_capabilities (context->engine, context->capabilities);
             bus_engine_proxy_set_cursor_location (context->engine, context->x, context->y, context->w, context->h);

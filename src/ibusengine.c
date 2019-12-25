@@ -38,6 +38,8 @@ enum {
     PROCESS_KEY_EVENT,
     FOCUS_IN,
     FOCUS_OUT,
+    FOCUS_IN_WITH_PATH,
+    FOCUS_OUT_WITH_PATH,
     RESET,
     ENABLE,
     DISABLE,
@@ -229,8 +231,12 @@ static const gchar introspection_xml[] =
     "      <arg direction='in'  type='u' name='button' />"
     "      <arg direction='in'  type='u' name='state' />"
     "    </method>"
-    "    <method name='FocusIn' />"
-    "    <method name='FocusOut' />"
+    "    <method name='FocusIn'>"
+    "      <arg direction='in'  type='o' name='object_path' />"
+    "    </method>"
+    "    <method name='FocusOut'>"
+    "      <arg direction='in'  type='o' name='object_path' />"
+    "    </method>"
     "    <method name='Reset' />"
     "    <method name='Enable' />"
     "    <method name='Disable' />"
@@ -434,6 +440,50 @@ ibus_engine_class_init (IBusEngineClass *class)
             _ibus_marshal_VOID__VOID,
             G_TYPE_NONE,
             0);
+
+    /**
+     * IBusEngine::focus-in-with-path:
+     * @engine: An @IBusEngine.
+     * @object_path: An object path.
+     *
+     * Emitted when the client application get the focus.
+     * Implement the member function IBusEngineClass::focus_in_with_path
+     * in extended class to receive this signal.
+     *
+     * <note><para>Argument @user_data is ignored in this function.</para></note>
+     */
+    engine_signals[FOCUS_IN_WITH_PATH] =
+        g_signal_new (I_("focus-in-with-path"),
+            G_TYPE_FROM_CLASS (gobject_class),
+            G_SIGNAL_RUN_LAST,
+            G_STRUCT_OFFSET (IBusEngineClass, focus_in_with_path),
+            NULL, NULL,
+            _ibus_marshal_VOID__STRING,
+            G_TYPE_NONE,
+            1,
+            G_TYPE_STRING);
+
+    /**
+     * IBusEngine::focus-out-with-path:
+     * @engine: An @IBusEngine.
+     * @object_path: An object path.
+     *
+     * Emitted when the client application  lost the focus.
+     * Implement the member function IBusEngineClass::focus_out_with_path
+     * in extended class to receive this signal.
+     *
+     * <note><para>Argument @user_data is ignored in this function.</para></note>
+     */
+    engine_signals[FOCUS_OUT_WITH_PATH] =
+        g_signal_new (I_("focus-out-with-path"),
+            G_TYPE_FROM_CLASS (gobject_class),
+            G_SIGNAL_RUN_LAST,
+            G_STRUCT_OFFSET (IBusEngineClass, focus_out_with_path),
+            NULL, NULL,
+            _ibus_marshal_VOID__STRING,
+            G_TYPE_NONE,
+            1,
+            G_TYPE_STRING);
 
     /**
      * IBusEngine::reset:
@@ -1152,8 +1202,6 @@ ibus_engine_service_method_call (IBusService           *service,
         gchar *member;
         guint  signal_id;
     } no_arg_methods[] = {
-        { "FocusIn",     FOCUS_IN },
-        { "FocusOut",    FOCUS_OUT },
         { "Reset",       RESET },
         { "Enable",      ENABLE },
         { "Disable",     DISABLE },
@@ -1170,6 +1218,40 @@ ibus_engine_service_method_call (IBusService           *service,
             g_dbus_method_invocation_return_value (invocation, NULL);
             return;
         }
+    }
+
+    if (g_strcmp0 (method_name, "FocusIn") == 0) {
+        gchar *path;
+        g_variant_get (parameters, "(o)", &path);
+        if (IBUS_ENGINE_GET_CLASS (service)->focus_in_with_path) {
+            g_signal_emit (engine,
+                           engine_signals[FOCUS_IN_WITH_PATH],
+                           0,
+                           path);
+        } else {
+            g_signal_emit (engine,
+                           engine_signals[FOCUS_IN],
+                           0);
+        }
+        g_dbus_method_invocation_return_value (invocation, NULL);
+        return;
+    }
+
+    if (g_strcmp0 (method_name, "FocusOut") == 0) {
+        gchar *path;
+        g_variant_get (parameters, "(o)", &path);
+        if (IBUS_ENGINE_GET_CLASS (service)->focus_out_with_path) {
+            g_signal_emit (engine,
+                           engine_signals[FOCUS_OUT_WITH_PATH],
+                           0,
+                           path);
+        } else {
+            g_signal_emit (engine,
+                           engine_signals[FOCUS_OUT],
+                           0);
+        }
+        g_dbus_method_invocation_return_value (invocation, NULL);
+        return;
     }
 
     if (g_strcmp0 (method_name, "CandidateClicked") == 0) {

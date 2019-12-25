@@ -2,7 +2,7 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2015-2018 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2015-2019 Takao Fujiwara <takao.fujiwara1@gmail.com>
  * Copyright (C) 2008-2016 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
@@ -1223,14 +1223,15 @@ DEFINE_FUNCTION (CursorDown, cursor_down)
 #undef DEFINE_FUNCTION
 
 void
-bus_engine_proxy_focus_in (BusEngineProxy *engine)
+bus_engine_proxy_focus_in (BusEngineProxy *engine,
+                           const gchar    *path)
 {
     g_assert (BUS_IS_ENGINE_PROXY (engine));
     if (!engine->has_focus) {
         engine->has_focus = TRUE;
         g_dbus_proxy_call ((GDBusProxy *)engine,
                            "FocusIn",
-                           NULL,
+                           g_variant_new ("(o)", path),
                            G_DBUS_CALL_FLAGS_NONE,
                            -1,
                            NULL,
@@ -1240,14 +1241,15 @@ bus_engine_proxy_focus_in (BusEngineProxy *engine)
 }
 
 void
-bus_engine_proxy_focus_out (BusEngineProxy *engine)
+bus_engine_proxy_focus_out (BusEngineProxy *engine,
+                            const gchar    *path)
 {
     g_assert (BUS_IS_ENGINE_PROXY (engine));
     if (engine->has_focus) {
         engine->has_focus = FALSE;
         g_dbus_proxy_call ((GDBusProxy *)engine,
                            "FocusOut",
-                           NULL,
+                           g_variant_new ("(o)", path),
                            G_DBUS_CALL_FLAGS_NONE,
                            -1,
                            NULL,
