@@ -689,6 +689,11 @@ ibus_bus_destroy (IBusObject *object)
     _bus = NULL;
 
     if (bus->priv->monitor) {
+        /* rhbz#1795499 _changed_cb() causes SEGV because of no bus->priv
+         * after ibus_bus_destroy() is called.
+         */
+        g_signal_handlers_disconnect_by_func (bus->priv->monitor,
+                                              (GCallback) _changed_cb, bus);
         g_object_unref (bus->priv->monitor);
         bus->priv->monitor = NULL;
     }
