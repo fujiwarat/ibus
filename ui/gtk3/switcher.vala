@@ -143,6 +143,8 @@ class Switcher : Gtk.Window {
         assert (m_loop == null);
         assert (index < engines.length);
 
+        if (m_is_running)
+            return index;
         m_is_running = true;
         m_keyval = keyval;
         m_modifiers = state;
