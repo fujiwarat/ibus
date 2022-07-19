@@ -82,9 +82,16 @@ finit()
 
 test_xkb_keymaps()
 {
+    # G_MESSAGES_DEBUG=all or G_MESSAGES_DEBUG=GLib-GIO-DEBUG would append
+    # debug messages to gsettings output and could not get the result correctly.
+    backup_G_MESSAGES_DEBUG="$G_MESSAGES_DEBUG"
+    unset G_MESSAGES_DEBUG
     # Loop over top level schemas since "gsettings list-recursively" only
     # looks for direct children.
     xkb_latin_layouts=`gsettings get org.freedesktop.ibus.general xkb-latin-layouts`
+    if [ x"$backup_G_MESSAGES_DEBUG" != x ] ; then
+        export G_MESSAGES_DEBUG=$backup_G_MESSAGES_DEBUG
+    fi
     while read keymap ; do
         eval keymap="$keymap"
         HAS_VARIANT=$($ECHO "$keymap" | grep '(' 2> /dev/null) ||:
