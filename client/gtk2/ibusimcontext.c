@@ -567,6 +567,7 @@ _process_key_event (IBusInputContext *context,
 static void
 _request_surrounding_text (IBusIMContext *context)
 {
+    static gboolean warned = FALSE;
     if (context &&
         (context->caps & IBUS_CAP_SURROUNDING_TEXT) != 0 &&
         context->ibuscontext != NULL &&
@@ -580,8 +581,11 @@ _request_surrounding_text (IBusIMContext *context)
              * fail with the first typing on firefox but it succeeds with
              * the second typing.
              */
-            g_warning ("%s has no capability of surrounding-text feature",
-                       g_get_prgname ());
+            if (!warned) {
+                g_warning ("%s has no capability of surrounding-text feature",
+                           g_get_prgname ());
+                warned = TRUE;
+            }
         }
     }
 }
