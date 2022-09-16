@@ -577,10 +577,14 @@ _request_surrounding_text (IBusIMContext *context)
         g_signal_emit (context, _signal_retrieve_surrounding_id, 0,
                        &return_value);
         if (!return_value) {
-            /* #2054 firefox::IMContextWrapper::GetCurrentParagraph() could
-             * fail with the first typing on firefox but it succeeds with
-             * the second typing.
+            /* Engines can disable the surrounding text feature with
+             * the updated capabilities.
              */
+            if (context->caps & IBUS_CAP_SURROUNDING_TEXT) {
+                context->caps &= ~IBUS_CAP_SURROUNDING_TEXT;
+                ibus_input_context_set_capabilities (context->ibuscontext,
+                                                     context->caps);
+            }
             if (!warned) {
                 g_warning ("%s has no capability of surrounding-text feature",
                            g_get_prgname ());
