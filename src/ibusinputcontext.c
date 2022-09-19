@@ -2,7 +2,7 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2018-2019 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2018-2022 Takao Fujiwara <takao.fujiwara1@gmail.com>
  * Copyright (C) 2008-2019 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
@@ -55,6 +55,7 @@ enum {
     CURSOR_DOWN_LOOKUP_TABLE,
     REGISTER_PROPERTIES,
     UPDATE_PROPERTY,
+    REQUIRE_SURROUNDING_TEXT,
     LAST_SIGNAL,
 };
 
@@ -488,6 +489,21 @@ ibus_input_context_class_init (IBusInputContextClass *class)
             1,
             IBUS_TYPE_PROPERTY);
 
+    /**
+     * IBusInputContext::require-surrounding-text:
+     * @context: An IBusInputContext.
+     *
+     * Emitted to receive the RequireSurroundingText signal from the daemon.
+     */
+    context_signals[REQUIRE_SURROUNDING_TEXT] =
+        g_signal_new (I_("require-surrounding-text"),
+            G_TYPE_FROM_CLASS (class),
+            G_SIGNAL_RUN_LAST,
+            0,
+            NULL, NULL,
+            _ibus_marshal_VOID__VOID,
+            G_TYPE_NONE, 0);
+
     text_empty = ibus_text_new_from_static_string ("");
     g_object_ref_sink (text_empty);
 }
@@ -735,6 +751,7 @@ ibus_input_context_g_signal (GDBusProxy  *proxy,
 
     if (g_strcmp0 (signal_name, "RequireSurroundingText") == 0) {
         priv->needs_surrounding_text = TRUE;
+        g_signal_emit (context, context_signals[REQUIRE_SURROUNDING_TEXT], 0);
         return;
     }
 
@@ -1116,9 +1133,19 @@ ibus_input_context_set_surrounding_text (IBusInputContext   *context,
 
     priv = IBUS_INPUT_CONTEXT_GET_PRIVATE (context);
 
+    /* This API should send "SetSurroundingText" D-Bus method when
+     * input contexts are switched between tabs in a text application
+     * so that engines can receive the updated surrounding texts after
+     * focus-in events happen.
+     *
+     * GNOME shell uses a single input context and the address of the input
+     * contexts are always same. So check the address of texts if the input
+     * contexts on applications are switched.
+     */
     if (cursor_pos != priv->surrounding_cursor_pos ||
         anchor_pos != priv->selection_anchor_pos ||
         priv->surrounding_text == NULL ||
+        text != priv->surrounding_text ||
         g_strcmp0 (text->text, priv->surrounding_text->text) != 0) {
         if (priv->surrounding_text)
             g_object_unref (priv->surrounding_text);
