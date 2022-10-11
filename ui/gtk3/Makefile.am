@@ -81,21 +81,6 @@ AM_VALAFLAGS = \
 	--target-glib="$(VALA_TARGET_GLIB_VERSION)" \
 	$(NULL)
 
-if ENABLE_LIBNOTIFY
-AM_CFLAGS += \
-       @LIBNOTIFY_CFLAGS@ \
-       $(NULL)
-
-AM_LDADD += \
-       @LIBNOTIFY_LIBS@ \
-       $(NULL)
-
-AM_VALAFLAGS += \
-       --pkg=libnotify \
-       -D ENABLE_LIBNOTIFY \
-       $(NULL)
-endif
-
 if ENABLE_APPINDICATOR
 AM_VALAFLAGS += --define=INDICATOR
 endif
