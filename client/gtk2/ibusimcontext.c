@@ -194,18 +194,21 @@ static void     _create_input_context       (IBusIMContext      *context);
 static gboolean _set_cursor_location_internal
                                             (IBusIMContext      *context);
 
+static void     _bus_global_engine_changed  (IBusBus            *bus,
+                                             char               *engine_name,
+                                             IBusIMContext      *context);
 static void     _bus_connected_cb           (IBusBus            *bus,
                                              IBusIMContext      *context);
 /* callback functions for slave context */
 static void     _slave_commit_cb            (GtkIMContext       *slave,
                                              gchar              *string,
-                                             IBusIMContext       *context);
+                                             IBusIMContext      *context);
 static void     _slave_preedit_changed_cb   (GtkIMContext       *slave,
-                                             IBusIMContext       *context);
+                                             IBusIMContext      *context);
 static void     _slave_preedit_start_cb     (GtkIMContext       *slave,
-                                             IBusIMContext       *context);
+                                             IBusIMContext      *context);
 static void     _slave_preedit_end_cb       (GtkIMContext       *slave,
-                                             IBusIMContext       *context);
+                                             IBusIMContext      *context);
 static gboolean _slave_retrieve_surrounding_cb
                                             (GtkIMContext       *slave,
                                              IBusIMContext      *context);
@@ -317,7 +320,7 @@ meta_create_xkb_context (void)
 
 // mutter-42.2/src/backends/native/meta-keymap-native.c
 struct xkb_keymap *
-meta_keymap_native_new (void)
+meta_keymap_native_new (IBusEngineDesc *desc)
 {
     struct xkb_context *ctx;
     struct xkb_rule_names names;
@@ -326,8 +329,14 @@ meta_keymap_native_new (void)
     names.rules = "evdev";
     names.model = "pc105";
     //names.model = "";
-    names.layout = "jp";
-    names.variant = "";
+    if (desc) {
+        names.layout = ibus_engine_desc_get_layout (desc);
+        names.variant = ibus_engine_desc_get_layout_variant (desc);
+    } else {
+        //names.layout = "jp";
+        names.layout = "us";
+        names.variant = "";
+    }
     names.options = "";
 
     ctx = meta_create_xkb_context ();
@@ -339,16 +348,35 @@ meta_keymap_native_new (void)
 }
 
 static struct xkb_state *
-get_xkb_state(void)
+get_xkb_state (IBusEngineDesc *desc)
 {
+#ifdef GDK_WINDOWING_WAYLAND
+    static gboolean checked_wayland = FALSE;
+    static gboolean is_wayland = FALSE;
     static struct xkb_state *xkb_state = NULL;
     static struct xkb_keymap *xkb_keymap;
-    if (xkb_state)
-        return xkb_state;
-
-    xkb_keymap = meta_keymap_native_new ();
+    if (!checked_wayland) {
+        is_wayland = GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ());
+        checked_wayland = TRUE;
+    }
+    if (!is_wayland)
+        return NULL;
+    if (xkb_state) {
+        if (!desc) {
+            return xkb_state;
+        } else {
+            const char *layout = ibus_engine_desc_get_layout (desc);
+            if (!layout || *layout == '\0' || !g_strcmp0 (layout, "default"))
+                return xkb_state;
+        }
+        g_clear_pointer (&xkb_state, xkb_state_unref);
+    }
+    xkb_keymap = meta_keymap_native_new (desc);
     xkb_state = xkb_state_new (xkb_keymap);
     return xkb_state;
+#else
+    return NULL;
+#endif
 }
 
 #if !GTK_CHECK_VERSION (3, 98, 4)
@@ -360,7 +388,6 @@ _focus_in_cb (GtkWidget     *widget,
     if (_focus_im_context == NULL && _fake_context != NULL) {
         ibus_input_context_focus_in (_fake_context);
     }
-    get_xkb_state();
     return FALSE;
 }
 
@@ -387,7 +414,7 @@ ibus_im_context_commit_event (IBusIMContext *ibusimcontext,
     guint keyval;
     guint keycode;
     GdkModifierType state = 0;
-    struct xkb_state *xkb_state = get_xkb_state();
+    struct xkb_state *xkb_state = get_xkb_state (NULL);
     int i;
     GdkModifierType no_text_input_mask;
     gunichar ch;
@@ -405,14 +432,10 @@ ibus_im_context_commit_event (IBusIMContext *ibusimcontext,
     keyval = event->keyval;
     state = event->state;
 #endif
-    const xkb_keysym_t *keysyms;
-    if (_use_sync_mode == 1)
-        keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
-    int num_keysyms = xkb_state_key_get_syms (xkb_state, keycode, &keysyms);
-    int size = xkb_state_key_get_utf8 (xkb_state, keycode, NULL, 0) + 1;
-    char *buffer = g_new0 (char, size);
-    xkb_state_key_get_utf8 (xkb_state, keycode, buffer, size);
-    g_free (buffer);
+    if (_use_sync_mode == 1) {
+        if (xkb_state)
+            keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
+    }
 
     /* Ignore modifier key presses */
     for (i = 0; i < G_N_ELEMENTS (IBUS_COMPOSE_IGNORE_KEYLIST); i++)
@@ -586,15 +609,18 @@ _process_key_event (IBusInputContext *context,
 
     switch (_use_sync_mode) {
     case 1: {
-        struct xkb_state *xkb_state = get_xkb_state();
-        guint new_keyval;
-        new_keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
+        struct xkb_state *xkb_state = get_xkb_state (NULL);
+        if (xkb_state)
+            keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
         retval = ibus_input_context_process_key_event (context,
-                                                       new_keyval,
+                                                       keyval,
                                                        keycode - 8,
                                                        state);
-        xkb_state_update_key (xkb_state, keycode,
-                              (state & IBUS_RELEASE_MASK) ? XKB_KEY_UP : XKB_KEY_DOWN);
+        if (xkb_state) {
+            xkb_state_update_key (xkb_state, keycode,
+                                  (state & IBUS_RELEASE_MASK)
+                                  ? XKB_KEY_UP : XKB_KEY_DOWN);
+        }
         break;
     }
     case 2: {
@@ -1014,13 +1040,15 @@ ibus_im_context_class_init (IBusIMContextClass *class)
     /* init bus object */
     if (_bus == NULL) {
         _bus = ibus_bus_new_async_client ();
+        ibus_bus_set_watch_ibus_signal (_bus, TRUE);
 
         /* init the global fake context */
         if (ibus_bus_is_connected (_bus)) {
             _create_fake_input_context ();
         }
 
-        g_signal_connect (_bus, "connected", G_CALLBACK (_bus_connected_cb), NULL);
+        g_signal_connect (_bus, "connected",
+                          G_CALLBACK (_bus_connected_cb), NULL);
     }
 
 
@@ -1124,9 +1152,12 @@ ibus_im_context_init (GObject *obj)
                       ibusimcontext);
 
     if (ibus_bus_is_connected (_bus)) {
+        get_xkb_state (ibus_bus_get_global_engine (_bus));
         _create_input_context (ibusimcontext);
     }
 
+    g_signal_connect (_bus, "global-engine-changed",
+                      G_CALLBACK (_bus_global_engine_changed), obj);
     g_signal_connect (_bus, "connected", G_CALLBACK (_bus_connected_cb), obj);
 }
 
@@ -1149,7 +1180,13 @@ ibus_im_context_finalize (GObject *obj)
 
     IBusIMContext *ibusimcontext = IBUS_IM_CONTEXT (obj);
 
-    g_signal_handlers_disconnect_by_func (_bus, G_CALLBACK (_bus_connected_cb), obj);
+    g_signal_handlers_disconnect_by_func (
+            _bus,
+            G_CALLBACK (_bus_global_engine_changed),
+            obj);
+    g_signal_handlers_disconnect_by_func (_bus,
+                                          G_CALLBACK (_bus_connected_cb),
+                                          obj);
 
     if (ibusimcontext->cancellable != NULL) {
         /* Cancel any ongoing create input context request */
@@ -1340,7 +1377,6 @@ ibus_im_context_focus_in (GtkIMContext *context)
     }
 #endif
 
-    get_xkb_state();
     if (widget && GTK_IS_ENTRY (widget) &&
         !gtk_entry_get_visibility (GTK_ENTRY (widget))) {
         return;
@@ -1888,10 +1924,26 @@ ibus_im_context_set_surrounding_with_selection (GtkIMContext  *context,
 }
 
 static void
+_bus_global_engine_changed (IBusBus            *bus,
+                            char               *engine_name,
+                            IBusIMContext      *ibusimcontext)
+{
+    IBusEngineDesc *desc;
+    IDEBUG ("%s", __FUNCTION__);
+
+    g_return_if_fail (bus);
+    desc = ibus_bus_get_global_engine (bus);
+    g_return_if_fail (desc);
+    g_assert (!g_strcmp0 (ibus_engine_desc_get_name (desc), engine_name));
+    get_xkb_state (desc);
+}
+
+static void
 _bus_connected_cb (IBusBus          *bus,
                    IBusIMContext    *ibusimcontext)
 {
     IDEBUG ("%s", __FUNCTION__);
+    get_xkb_state (ibus_bus_get_global_engine (bus));
     if (ibusimcontext)
         _create_input_context (ibusimcontext);
     else
