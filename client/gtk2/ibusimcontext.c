@@ -70,7 +70,6 @@ struct _IBusIMContext {
 #endif
 
     IBusInputContext *ibuscontext;
-    IBusInputContext *ibuscontext_needs_surrounding;
 
     /* preedit status */
     gchar           *preedit_string;
@@ -214,7 +213,7 @@ static gboolean _slave_delete_surrounding_cb
                                              gint                offset_from_cursor,
                                              guint               nchars,
                                              IBusIMContext      *context);
-static void     _request_surrounding_text   (IBusIMContext      *context);
+static gboolean _request_surrounding_text   (IBusIMContext      *context);
 static void     _create_fake_input_context  (void);
 static gboolean _set_content_type           (IBusIMContext      *context);
 
@@ -565,34 +564,19 @@ _process_key_event (IBusInputContext *context,
  * context->caps has IBUS_CAP_SURROUNDING_TEXT and the current IBus
  * engine needs surrounding-text.
  */
-static void
+static gboolean
 _request_surrounding_text (IBusIMContext *context)
 {
-    static gboolean warned = FALSE;
+    gboolean return_value = TRUE;
     if (context &&
         (context->caps & IBUS_CAP_SURROUNDING_TEXT) != 0 &&
         context->ibuscontext != NULL &&
         ibus_input_context_needs_surrounding_text (context->ibuscontext)) {
-        gboolean return_value;
         IDEBUG ("requesting surrounding text");
         g_signal_emit (context, _signal_retrieve_surrounding_id, 0,
                        &return_value);
-        if (!return_value) {
-            /* Engines can disable the surrounding text feature with
-             * the updated capabilities.
-             */
-            if (context->caps & IBUS_CAP_SURROUNDING_TEXT) {
-                context->caps &= ~IBUS_CAP_SURROUNDING_TEXT;
-                ibus_input_context_set_capabilities (context->ibuscontext,
-                                                     context->caps);
-            }
-            if (!warned) {
-                g_warning ("%s has no capability of surrounding-text feature",
-                           g_get_prgname ());
-                warned = TRUE;
-            }
-        }
     }
+    return return_value;
 }
 
 static gboolean
@@ -986,7 +970,6 @@ ibus_im_context_init (GObject *obj)
     ibusimcontext->cursor_area.height = 0;
 
     ibusimcontext->ibuscontext = NULL;
-    ibusimcontext->ibuscontext_needs_surrounding = NULL;
     ibusimcontext->has_focus = FALSE;
     ibusimcontext->time = GDK_CURRENT_TIME;
 #ifdef ENABLE_SURROUNDING
@@ -2186,15 +2169,32 @@ _ibus_context_hide_preedit_text_cb (IBusInputContext *ibuscontext,
 }
 
 static void
+_ibus_warn_no_support_surrounding_text (IBusIMContext *context)
+{
+    /* Engines can disable the surrounding text feature with
+     * the updated capabilities.
+     */
+    if (context->caps & IBUS_CAP_SURROUNDING_TEXT) {
+        context->caps &= ~IBUS_CAP_SURROUNDING_TEXT;
+        ibus_input_context_set_capabilities (context->ibuscontext,
+                                             context->caps);
+    }
+    g_warning ("%s has no capability of surrounding-text feature",
+               g_get_prgname ());
+}
+
+static void
 _ibus_context_require_surrounding_text_cb (IBusInputContext *ibuscontext,
                                            IBusIMContext    *ibusimcontext)
 {
     IDEBUG ("%s", __FUNCTION__);
     g_assert (ibusimcontext->ibuscontext == ibuscontext);
-    if (ibusimcontext->ibuscontext_needs_surrounding == ibuscontext) {
-        _request_surrounding_text (ibusimcontext);
-        ibusimcontext->ibuscontext_needs_surrounding = NULL;
-    }
+    if (!_request_surrounding_text (ibusimcontext))
+        _ibus_warn_no_support_surrounding_text (ibusimcontext);
+    g_signal_handlers_disconnect_by_func (
+            ibusimcontext->ibuscontext,
+            G_CALLBACK (_ibus_context_require_surrounding_text_cb),
+            ibusimcontext);
 }
 
 static void
@@ -2236,6 +2236,7 @@ _create_input_context_done (IBusBus       *bus,
         g_error_free (error);
     }
     else {
+        gboolean requested_surrounding_text = FALSE;
         ibus_input_context_set_client_commit_preedit (context, TRUE);
         ibusimcontext->ibuscontext = context;
 
@@ -2263,16 +2264,12 @@ _create_input_context_done (IBusBus       *bus,
                           "hide-preedit-text",
                           G_CALLBACK (_ibus_context_hide_preedit_text_cb),
                           ibusimcontext);
-        g_signal_connect (
-                ibusimcontext->ibuscontext,
-                "require-surrounding-text",
-                G_CALLBACK (_ibus_context_require_surrounding_text_cb),
-                ibusimcontext);
         g_signal_connect (ibusimcontext->ibuscontext, "destroy",
                           G_CALLBACK (_ibus_context_destroy_cb),
                           ibusimcontext);
 
-        ibus_input_context_set_capabilities (ibusimcontext->ibuscontext, ibusimcontext->caps);
+        ibus_input_context_set_capabilities (ibusimcontext->ibuscontext,
+                                             ibusimcontext->caps);
 
         if (ibusimcontext->has_focus) {
             /* The time order is _create_input_context() ->
@@ -2286,10 +2283,17 @@ _create_input_context_done (IBusBus       *bus,
             _set_cursor_location_internal (ibusimcontext);
             if (ibus_input_context_needs_surrounding_text (
                         ibusimcontext->ibuscontext)) {
-                _request_surrounding_text (ibusimcontext);
-            } else {
-                ibusimcontext->ibuscontext_needs_surrounding = ibusimcontext->ibuscontext;
+                if (!_request_surrounding_text (ibusimcontext))
+                    _ibus_warn_no_support_surrounding_text (ibusimcontext);
+                requested_surrounding_text = TRUE;
             }
+        }
+        if (!requested_surrounding_text) {
+            g_signal_connect (
+                    ibusimcontext->ibuscontext,
+                    "require-surrounding-text",
+                    G_CALLBACK (_ibus_context_require_surrounding_text_cb),
+                    ibusimcontext);
         }
 
         if (!g_queue_is_empty (ibusimcontext->events_queue)) {
