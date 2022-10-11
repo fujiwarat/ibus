@@ -29,6 +29,7 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 #include <ibus.h>
+#include <xkbcommon/xkbcommon.h>
 #include "ibusimcontext.h"
 
 #ifdef GDK_WINDOWING_WAYLAND
@@ -283,6 +284,73 @@ ibus_im_context_new (void)
     return IBUS_IM_CONTEXT (obj);
 }
 
+// mutter-42.2/src/backends/meta-keymap-utils.c
+struct xkb_context *
+meta_create_xkb_context (void)
+{
+#if 0
+    struct xkb_context *ctx;
+    char xdg[PATH_MAX] = {0};
+    const char *env;
+
+    /*
+     * We can only append search paths in libxkbcommon, so we start with an
+     * empty set, then add the XDG dir, then add the default search paths.
+     */
+    ctx = xkb_context_new (XKB_CONTEXT_NO_DEFAULT_INCLUDES);
+    env = g_getenv ("XDG_CONFIG_HOME");
+    if (env)
+        g_snprintf (xdg, sizeof xdg, "%s/xkb", env);
+    else if ((env = g_getenv ("HOME")))
+        g_snprintf (xdg, sizeof xdg, "%s/.config/xkb", env);
+
+    if (env)
+        xkb_context_include_path_append (ctx, xdg);
+    xkb_context_include_path_append_default (ctx);
+
+    return ctx;
+#else
+    return xkb_context_new (XKB_CONTEXT_NO_FLAGS);
+#endif
+}
+
+
+// mutter-42.2/src/backends/native/meta-keymap-native.c
+struct xkb_keymap *
+meta_keymap_native_new (void)
+{
+    struct xkb_context *ctx;
+    struct xkb_rule_names names;
+    struct xkb_keymap *xkb_keymap;
+
+    names.rules = "evdev";
+    names.model = "pc105";
+    //names.model = "";
+    names.layout = "jp";
+    names.variant = "";
+    names.options = "";
+
+    ctx = meta_create_xkb_context ();
+    g_assert (ctx);
+    xkb_keymap = xkb_keymap_new_from_names (ctx, &names, 0);
+    xkb_context_unref (ctx);
+
+    return xkb_keymap;
+}
+
+static struct xkb_state *
+get_xkb_state(void)
+{
+    static struct xkb_state *xkb_state = NULL;
+    static struct xkb_keymap *xkb_keymap;
+    if (xkb_state)
+        return xkb_state;
+
+    xkb_keymap = meta_keymap_native_new ();
+    xkb_state = xkb_state_new (xkb_keymap);
+    return xkb_state;
+}
+
 #if !GTK_CHECK_VERSION (3, 98, 4)
 static gboolean
 _focus_in_cb (GtkWidget     *widget,
@@ -292,6 +360,7 @@ _focus_in_cb (GtkWidget     *widget,
     if (_focus_im_context == NULL && _fake_context != NULL) {
         ibus_input_context_focus_in (_fake_context);
     }
+    get_xkb_state();
     return FALSE;
 }
 
@@ -315,8 +384,10 @@ ibus_im_context_commit_event (IBusIMContext *ibusimcontext,
                               GdkEventKey   *event)
 #endif
 {
-    guint keyval = 0;
+    guint keyval;
+    guint keycode;
     GdkModifierType state = 0;
+    struct xkb_state *xkb_state = get_xkb_state();
     int i;
     GdkModifierType no_text_input_mask;
     gunichar ch;
@@ -324,14 +395,24 @@ ibus_im_context_commit_event (IBusIMContext *ibusimcontext,
 #if GTK_CHECK_VERSION (3, 98, 4)
     if (gdk_event_get_event_type (event) == GDK_KEY_RELEASE)
         return FALSE;
+    keycode = gdk_key_event_get_keycode (event);
     keyval = gdk_key_event_get_keyval (event);
     state = gdk_event_get_modifier_state (event);
 #else
     if (event->type == GDK_KEY_RELEASE)
         return FALSE;
+    keycode = event->hardware_keycode;
     keyval = event->keyval;
     state = event->state;
 #endif
+    const xkb_keysym_t *keysyms;
+    if (_use_sync_mode == 1)
+        keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
+    int num_keysyms = xkb_state_key_get_syms (xkb_state, keycode, &keysyms);
+    int size = xkb_state_key_get_utf8 (xkb_state, keycode, NULL, 0) + 1;
+    char *buffer = g_new0 (char, size);
+    xkb_state_key_get_utf8 (xkb_state, keycode, buffer, size);
+    g_free (buffer);
 
     /* Ignore modifier key presses */
     for (i = 0; i < G_N_ELEMENTS (IBUS_COMPOSE_IGNORE_KEYLIST); i++)
@@ -505,10 +586,15 @@ _process_key_event (IBusInputContext *context,
 
     switch (_use_sync_mode) {
     case 1: {
+        struct xkb_state *xkb_state = get_xkb_state();
+        guint new_keyval;
+        new_keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
         retval = ibus_input_context_process_key_event (context,
-                                                       keyval,
+                                                       new_keyval,
                                                        keycode - 8,
                                                        state);
+        xkb_state_update_key (xkb_state, keycode,
+                              (state & IBUS_RELEASE_MASK) ? XKB_KEY_UP : XKB_KEY_DOWN);
         break;
     }
     case 2: {
@@ -1254,6 +1340,7 @@ ibus_im_context_focus_in (GtkIMContext *context)
     }
 #endif
 
+    get_xkb_state();
     if (widget && GTK_IS_ENTRY (widget) &&
         !gtk_entry_get_visibility (GTK_ENTRY (widget))) {
         return;
