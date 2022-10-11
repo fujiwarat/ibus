@@ -124,6 +124,7 @@ typedef enum {
     IBUS_CAP_SURROUNDING_TEXT   = 1 << 5,
     IBUS_CAP_OSK                = 1 << 6,
     IBUS_CAP_SYNC_PROCESS_KEY   = 1 << 7,
+    IBUS_CAP_SYNC_PROCESS_KEY_V2 = IBUS_CAP_SYNC_PROCESS_KEY,
 } IBusCapabilite;
 
 /**

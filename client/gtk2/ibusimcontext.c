@@ -381,8 +381,9 @@ typedef struct {
 } ProcessKeyEventData;
 
 typedef struct {
-    GMainLoop *loop;
-    gboolean    retval;
+    int       count;
+    guint     count_cb_id;
+    gboolean  retval;
 } ProcessKeyEventReplyData;
 
 static void
@@ -452,7 +453,23 @@ _process_key_event_reply_done (GObject      *object,
     }
     g_return_if_fail (data);
     data->retval = retval;
-    g_main_loop_quit (data->loop);
+    data->count = 0;
+    g_source_remove (data->count_cb_id);
+}
+
+static gboolean
+_process_key_event_count_cb (gpointer user_data)
+{
+    ProcessKeyEventReplyData *data = (ProcessKeyEventReplyData *)user_data;
+    g_return_val_if_fail (data, G_SOURCE_REMOVE);
+    if (!data->count)
+        return G_SOURCE_REMOVE;
+    /* Wait for about 10 secs. */
+    if (data->count++ == 10000) {
+        data->count = 0;
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
 }
 
 static gboolean
@@ -495,10 +512,10 @@ _process_key_event (IBusInputContext *context,
         break;
     }
     case 2: {
-        GMainLoop *loop = g_main_loop_new (NULL, TRUE);
+        GSource *source = g_timeout_source_new (1);
         ProcessKeyEventReplyData *data = NULL;
 
-        if (loop)
+        if (source)
             data = g_slice_new0 (ProcessKeyEventReplyData);
         if (!data) {
             g_warning ("Cannot wait for the reply of the process key event.");
@@ -506,11 +523,14 @@ _process_key_event (IBusInputContext *context,
                                                            keyval,
                                                            keycode - 8,
                                                            state);
-            if (loop)
-                g_main_loop_quit (loop);
+            if (source)
+                g_source_destroy (source);
             break;
         }
-        data->loop = loop;
+        data->count = 1;
+        g_source_attach (source, NULL);
+        g_source_unref (source);
+        data->count_cb_id = g_source_get_id (source);
         ibus_input_context_process_key_event_async (context,
             keyval,
             keycode - 8,
@@ -519,7 +539,14 @@ _process_key_event (IBusInputContext *context,
             NULL,
             _process_key_event_reply_done,
             data);
-        g_main_loop_run (loop);
+        g_source_set_callback (source, _process_key_event_count_cb, data, NULL);
+        while (data->count)
+            g_main_context_iteration (NULL, TRUE);
+        if (source->ref_count > 0) {
+            /* g_source_get_id() could causes a SEGV */
+            g_info ("Broken GSource.ref_count and maybe a timing issue in %p.",
+                    source);
+        }
         retval = data->retval;
         g_slice_free (ProcessKeyEventReplyData, data);
         break;
@@ -977,8 +1004,8 @@ ibus_im_context_init (GObject *obj)
 #else
     ibusimcontext->caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS;
 #endif
-    if (_use_sync_mode != 1)
-        ibusimcontext->caps |= IBUS_CAP_SYNC_PROCESS_KEY;
+    if (_use_sync_mode == 1)
+        ibusimcontext->caps |= IBUS_CAP_SYNC_PROCESS_KEY_V2;
 
     ibusimcontext->events_queue = g_queue_new ();
 
@@ -1321,7 +1348,7 @@ ibus_im_context_reset (GtkIMContext *context)
          * IBus uses button-press-event instead until GTK is fixed.
          * https://gitlab.gnome.org/GNOME/gtk/issues/1534
          */
-        if (_use_sync_mode == 1)
+        if (_use_sync_mode != 0)
             ibus_im_context_clear_preedit_text (ibusimcontext);
         ibus_input_context_reset (ibusimcontext->ibuscontext);
     }
@@ -1436,7 +1463,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
 
     if (ibusimcontext->client_window) {
 #if !GTK_CHECK_VERSION (3, 98, 4)
-        if (ibusimcontext->use_button_press_event && _use_sync_mode != 1)
+        if (ibusimcontext->use_button_press_event && _use_sync_mode == 0)
             _connect_button_press_event (ibusimcontext, FALSE);
 #endif
         g_object_unref (ibusimcontext->client_window);
@@ -1446,7 +1473,7 @@ ibus_im_context_set_client_window (GtkIMContext *context,
     if (client != NULL) {
         ibusimcontext->client_window = g_object_ref (client);
 #if !GTK_CHECK_VERSION (3, 98, 4)
-        if (!ibusimcontext->use_button_press_event && _use_sync_mode != 1)
+        if (!ibusimcontext->use_button_press_event && _use_sync_mode == 0)
             _connect_button_press_event (ibusimcontext, TRUE);
 #endif
     }
@@ -2068,7 +2095,7 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
 #if !GTK_CHECK_VERSION (3, 98, 4)
     if (!ibusimcontext->use_button_press_event &&
         mode == IBUS_ENGINE_PREEDIT_COMMIT &&
-        _use_sync_mode != 1) {
+        _use_sync_mode == 0) {
         if (ibusimcontext->client_window) {
             _connect_button_press_event (ibusimcontext, TRUE);
         }
@@ -2463,8 +2490,8 @@ _create_fake_input_context_done (IBusBus       *bus,
                       NULL);
 
     guint32 caps = IBUS_CAP_PREEDIT_TEXT | IBUS_CAP_FOCUS | IBUS_CAP_SURROUNDING_TEXT;
-    if (_use_sync_mode != 1)
-        caps |= IBUS_CAP_SYNC_PROCESS_KEY;
+    if (_use_sync_mode == 1)
+        caps |= IBUS_CAP_SYNC_PROCESS_KEY_V2;
     ibus_input_context_set_capabilities (_fake_context, caps);
 
     /* focus in/out the fake context */
