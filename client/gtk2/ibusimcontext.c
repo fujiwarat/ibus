@@ -29,15 +29,16 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 #include <ibus.h>
-#include <xkbcommon/xkbcommon.h>
 #include "ibusimcontext.h"
 
+/* libgtk-3.so is linked to libxkbcommon.so but not libgtk-x11-2.0.so */
 #ifdef GDK_WINDOWING_WAYLAND
 #if GTK_CHECK_VERSION (3, 98, 4)
 #include <gdk/wayland/gdkwayland.h>
 #else
 #include <gdk/gdkwayland.h>
 #endif
+#include <xkbcommon/xkbcommon.h>
 #endif
 
 #ifdef GDK_WINDOWING_X11
@@ -287,6 +288,7 @@ ibus_im_context_new (void)
     return IBUS_IM_CONTEXT (obj);
 }
 
+#ifdef GDK_WINDOWING_WAYLAND
 // mutter-42.2/src/backends/meta-keymap-utils.c
 struct xkb_context *
 meta_create_xkb_context (void)
@@ -316,7 +318,6 @@ meta_create_xkb_context (void)
     return xkb_context_new (XKB_CONTEXT_NO_FLAGS);
 #endif
 }
-
 
 // mutter-42.2/src/backends/native/meta-keymap-native.c
 struct xkb_keymap *
@@ -350,7 +351,6 @@ meta_keymap_native_new (IBusEngineDesc *desc)
 static struct xkb_state *
 get_xkb_state (IBusEngineDesc *desc)
 {
-#ifdef GDK_WINDOWING_WAYLAND
     static gboolean checked_wayland = FALSE;
     static gboolean is_wayland = FALSE;
     static struct xkb_state *xkb_state = NULL;
@@ -361,23 +361,24 @@ get_xkb_state (IBusEngineDesc *desc)
     }
     if (!is_wayland)
         return NULL;
-    if (xkb_state) {
-        if (!desc) {
+    /* Whether xkb_state is NULL or not, return xkb_state if layout is
+     * "default".
+     */
+    if (desc) {
+        const char *layout = ibus_engine_desc_get_layout (desc);
+        if (!layout || *layout == '\0' || !g_strcmp0 (layout, "default"))
             return xkb_state;
-        } else {
-            const char *layout = ibus_engine_desc_get_layout (desc);
-            if (!layout || *layout == '\0' || !g_strcmp0 (layout, "default"))
-                return xkb_state;
-        }
+    }
+    if (xkb_state) {
+        if (!desc)
+            return xkb_state;
         g_clear_pointer (&xkb_state, xkb_state_unref);
     }
     xkb_keymap = meta_keymap_native_new (desc);
     xkb_state = xkb_state_new (xkb_keymap);
     return xkb_state;
-#else
-    return NULL;
-#endif
 }
+#endif
 
 #if !GTK_CHECK_VERSION (3, 98, 4)
 static gboolean
@@ -414,7 +415,9 @@ ibus_im_context_commit_event (IBusIMContext *ibusimcontext,
     guint keyval;
     guint keycode;
     GdkModifierType state = 0;
+#ifdef GDK_WINDOWING_WAYLAND
     struct xkb_state *xkb_state = get_xkb_state (NULL);
+#endif
     int i;
     GdkModifierType no_text_input_mask;
     gunichar ch;
@@ -432,10 +435,15 @@ ibus_im_context_commit_event (IBusIMContext *ibusimcontext,
     keyval = event->keyval;
     state = event->state;
 #endif
+#ifdef GDK_WINDOWING_WAYLAND
     if (_use_sync_mode == 1) {
         if (xkb_state)
             keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
     }
+#else
+    /* Stop an unused warning. */
+    keycode = keycode + 0;
+#endif
 
     /* Ignore modifier key presses */
     for (i = 0; i < G_N_ELEMENTS (IBUS_COMPOSE_IGNORE_KEYLIST); i++)
@@ -609,18 +617,22 @@ _process_key_event (IBusInputContext *context,
 
     switch (_use_sync_mode) {
     case 1: {
+#ifdef GDK_WINDOWING_WAYLAND
         struct xkb_state *xkb_state = get_xkb_state (NULL);
         if (xkb_state)
             keyval = xkb_state_key_get_one_sym (xkb_state, keycode);
+#endif
         retval = ibus_input_context_process_key_event (context,
                                                        keyval,
                                                        keycode - 8,
                                                        state);
+#ifdef GDK_WINDOWING_WAYLAND
         if (xkb_state) {
             xkb_state_update_key (xkb_state, keycode,
                                   (state & IBUS_RELEASE_MASK)
                                   ? XKB_KEY_UP : XKB_KEY_DOWN);
         }
+#endif
         break;
     }
     case 2: {
@@ -1152,7 +1164,9 @@ ibus_im_context_init (GObject *obj)
                       ibusimcontext);
 
     if (ibus_bus_is_connected (_bus)) {
+#ifdef GDK_WINDOWING_WAYLAND
         get_xkb_state (ibus_bus_get_global_engine (_bus));
+#endif
         _create_input_context (ibusimcontext);
     }
 
@@ -1928,6 +1942,7 @@ _bus_global_engine_changed (IBusBus            *bus,
                             char               *engine_name,
                             IBusIMContext      *ibusimcontext)
 {
+#ifdef GDK_WINDOWING_WAYLAND
     IBusEngineDesc *desc;
     IDEBUG ("%s", __FUNCTION__);
 
@@ -1936,6 +1951,7 @@ _bus_global_engine_changed (IBusBus            *bus,
     g_return_if_fail (desc);
     g_assert (!g_strcmp0 (ibus_engine_desc_get_name (desc), engine_name));
     get_xkb_state (desc);
+#endif
 }
 
 static void
@@ -1943,7 +1959,9 @@ _bus_connected_cb (IBusBus          *bus,
                    IBusIMContext    *ibusimcontext)
 {
     IDEBUG ("%s", __FUNCTION__);
+#ifdef GDK_WINDOWING_WAYLAND
     get_xkb_state (ibus_bus_get_global_engine (bus));
+#endif
     if (ibusimcontext)
         _create_input_context (ibusimcontext);
     else
