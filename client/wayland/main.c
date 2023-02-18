@@ -1,7 +1,7 @@
 /* -*- mode: C; c-basic-offset: 4; indent-tabs-mode: nil; -*- */
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
- * Copyright (C) 2019-2021 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2019-2023 Takao Fujiwara <takao.fujiwara1@gmail.com>
  * Copyright (C) 2013 Intel Corporation
  * Copyright (C) 2013-2019 Red Hat, Inc.
  *
@@ -30,10 +30,20 @@
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
+#include <pwd.h>
+#include <stdio.h>
+#include <sys/time.h>
+
 #include "input-method-unstable-v1-client-protocol.h"
+
+#define IBUS_WAYLAND_VERSION "1.1"
+#define SLEEP_DIV_PER_SEC 100L
+#define MAX_DISPLAY_IDLE_TIME G_USEC_PER_SEC * SLEEP_DIV_PER_SEC * 60 * 3
 
 struct _IBusWaylandIM
 {
+    FILE *log;
+    char *user;
     struct zwp_input_method_v1 *input_method;
     struct zwp_input_method_context_v1 *context;
     struct wl_keyboard *keyboard;
@@ -85,11 +95,38 @@ struct _IBusWaylandSource
 };
 typedef struct _IBusWaylandSource IBusWaylandSource;
 
-struct wl_display *_display = NULL;
-struct wl_registry *_registry = NULL;
-static IBusBus *_bus = NULL;
+struct wl_display *_display;
+struct wl_registry *_registry;
+static IBusBus *_bus;
 
-static gboolean _use_sync_mode = FALSE;
+static gboolean _exec_daemon;
+static gchar *_daemon_args;
+static gboolean _verbose;
+static gboolean _use_sync_mode;
+
+static void show_version (void);
+
+static const GOptionEntry entries[] =
+{
+    { "version",     'V', G_OPTION_FLAG_NO_ARG, G_OPTION_ARG_CALLBACK,
+      show_version, "Show the applicaiton's version.", NULL },
+    { "exec-daemon", 'd', 0,                    G_OPTION_ARG_NONE,
+      &_exec_daemon, "Execute ibus-daemon.", NULL },
+    { "daemon-args", 'g', 0,                    G_OPTION_ARG_STRING,
+      &_daemon_args, "ibus-daemon'sarguments.", NULL },
+    { "verbose",     'v', 0,                    G_OPTION_ARG_NONE,
+      &_verbose, "Verbose log.", NULL },
+    { NULL }
+};
+
+static void
+show_version (void)
+{
+    g_print ("%s - Version %s\n",
+             g_get_application_name (),
+             IBUS_WAYLAND_VERSION);
+    exit (EXIT_SUCCESS);
+}
 
 static gboolean
 _get_boolean_env (const gchar *name,
@@ -108,6 +145,84 @@ _get_boolean_env (const gchar *name,
       return FALSE;
 
     return TRUE;
+}
+
+static gboolean
+ibus_wayland_open_log (IBusWaylandIM *wlim)
+{
+    char *directory;
+    char *path;
+    struct passwd *pw;
+    struct timeval time_val;
+    struct tm local_time;
+
+    g_assert (wlim);
+    directory = g_build_filename (g_get_user_cache_dir (), "ibus", NULL);
+    g_return_val_if_fail (directory, FALSE);
+    errno = 0;
+    if (g_mkdir_with_parents (directory, 0700) != 0) {
+        g_error ("mkdir is failed in: %s: %s",
+                 directory, g_strerror (errno));
+        return FALSE;
+    }
+    path = g_build_filename (directory, "wayland.log", NULL);
+    g_free (directory);
+    wlim->log = fopen (path, "w");
+    g_free (path);
+
+    pw = getpwuid (getuid ());
+    if (pw)
+        wlim->user = g_strndup (pw->pw_name, 6);
+    else
+        wlim->user = g_strndup (g_getenv ("USER"), 6);
+    if (!wlim->user)
+        wlim->user = g_strdup ("UNKNOW");
+    gettimeofday (&time_val, NULL);
+    localtime_r (&time_val.tv_sec, &local_time);
+    fprintf (wlim->log, "start %02d:%02d:%02d.%6d\n",
+             local_time.tm_hour,
+             local_time.tm_min,
+             local_time.tm_sec,
+             (int)time_val.tv_usec);
+    fflush (wlim->log);
+    return TRUE;
+}
+
+void
+ibus_wayland_check_ps (IBusWaylandIM *wlim)
+{
+    gchar *standard_output = NULL;
+    gchar *standard_error = NULL;
+    gint wait_status = 0;
+    GError *error = NULL;
+
+    g_assert (wlim);
+    g_assert (wlim->log);
+    g_assert (wlim->user);
+    g_spawn_command_line_sync  ("ps -ef",
+                                &standard_output,
+                                &standard_error,
+                                &wait_status,
+                                &error);
+    if (error) {
+        fprintf (wlim->log, "Failed ps %s: %s\n",
+                 error->message, standard_error);
+        g_error_free (error);
+    } else {
+        int i;
+        char **lines = g_strsplit (standard_output, "\n", -1);
+        fprintf (wlim->log, "ps -ef\n");
+        for (i = 0; lines && lines[i]; i++) {
+            if (g_strstr_len (lines[i], -1, wlim->user) &&
+                g_strstr_len (lines[i], -1, "wayland")) {
+                fprintf (wlim->log, "  %s\n", lines[i]);
+            }
+        }
+        g_strfreev (lines);
+    }
+    g_free (standard_output);
+    g_free (standard_error);
+    fflush (wlim->log);
 }
 
 static gboolean
@@ -680,6 +795,69 @@ static const struct zwp_input_method_v1_listener input_method_listener = {
     input_method_deactivate
 };
 
+
+static void
+_bus_disconnected_cb (IBusBus *bus,
+                      gpointer user_data)
+{
+    g_debug ("Connection closed by ibus-daemon\n");
+    g_clear_object (&_bus);
+    ibus_quit ();
+}
+
+void
+run_ibus_daemon (IBusWaylandIM *wlim)
+{
+    char **_args;
+    guint i, arg_len = 2;
+    char **args;
+    GPid child_pid = 0;
+    GError *error = NULL;
+
+    _args = g_strsplit (_daemon_args, " ", -1);
+    if (_args)
+        arg_len += g_strv_length (_args);
+    args = g_new0 (char *, arg_len);
+    args[0] = g_strdup ("ibus-daemon");
+    for (i = 0; i < arg_len; i++)
+        args[i + 1] = g_strdup (_args[i]);
+    g_strfreev (_args);
+    g_spawn_async (NULL,
+                   args,
+                   NULL,
+                   G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH,
+                   NULL,
+                   NULL,
+                   &child_pid,
+                   &error);
+    if (error) {
+        fprintf (wlim->log, "test %s\n", error->message);
+        fflush (wlim->log);
+        fclose (wlim->log);
+        g_error ("%s\n", error->message);
+        g_error_free (error);
+        return;
+    }
+    g_strfreev (args);
+    g_usleep (5 * G_USEC_PER_SEC);
+}
+
+static void
+connect_ibus_bus (IBusWaylandIM *wlim)
+{
+    _bus = ibus_bus_new ();
+    if (!ibus_bus_is_connected (_bus)) {
+        fprintf (wlim->log, "Cannot connect to ibus-daemon\n");
+        fflush (wlim->log);
+        fclose (wlim->log);
+        g_error ("Cannot connect to ibus-daemon\n");
+        return;
+    }
+
+    g_signal_connect (_bus, "disconnected",
+                      G_CALLBACK (_bus_disconnected_cb), NULL);
+}
+
 static void
 registry_handle_global (void               *data,
                         struct wl_registry *registry,
@@ -689,12 +867,19 @@ registry_handle_global (void               *data,
 {
     IBusWaylandIM *wlim = data;
 
+    if (_verbose) {
+        fprintf (wlim->log, "wl_reistry gets interface: %s\n", interface);
+        fflush (wlim->log);
+    }
     if (!g_strcmp0 (interface, "zwp_input_method_v1")) {
         wlim->input_method =
             wl_registry_bind (registry, name,
                               &zwp_input_method_v1_interface, 1);
         zwp_input_method_v1_add_listener (wlim->input_method,
                                           &input_method_listener, wlim);
+        if (_exec_daemon)
+            run_ibus_daemon (wlim);
+        connect_ibus_bus (wlim);
     }
 }
 
@@ -710,49 +895,72 @@ static const struct wl_registry_listener registry_listener = {
     registry_handle_global_remove
 };
 
-static void
-_bus_disconnected_cb (IBusBus *bus,
-                      gpointer user_data)
-{
-    g_debug ("Connection closed by ibus-daemon\n");
-    g_clear_object (&_bus);
-    ibus_quit ();
-}
-
 gint
 main (gint    argc,
       gchar **argv)
 {
     IBusWaylandIM wlim;
+    GOptionContext *context;
+    GError *error;
+    gulong i = 0;
     GSource *source;
 
-    ibus_init ();
+    memset (&wlim, 0, sizeof (wlim));
+    if (!ibus_wayland_open_log (&wlim))
+        return EXIT_FAILURE;
+    context = g_option_context_new ("- IBus Wayland");
+    g_option_context_add_main_entries (context, entries, "ibus-wayland");
 
-    _bus = ibus_bus_new ();
-    if (!ibus_bus_is_connected (_bus)) {
-        g_printerr ("Cannot connect to ibus-daemon\n");
+    if (!g_option_context_parse (context, &argc, &argv, &error)) {
+        fprintf (wlim.log, "Option parsing failed: %s\n", error->message);
+        fflush (wlim.log);
+        fclose (wlim.log);
+        g_error_free (error);
         return EXIT_FAILURE;
     }
+    if (!_daemon_args)
+        _daemon_args = g_strdup ("--xim");
 
-    _display = wl_display_connect (NULL);
+    ibus_init ();
+    ibus_set_log_handler (TRUE);
+
+    while ((_display = wl_display_connect (NULL)) == NULL) {
+        if (i == MAX_DISPLAY_IDLE_TIME)
+            break;
+        g_usleep (G_USEC_PER_SEC / SLEEP_DIV_PER_SEC);
+        if (_verbose) {
+            fprintf (wlim.log, "spend %lu/%lu sec\n", i, SLEEP_DIV_PER_SEC);
+            fflush (wlim.log);
+        }
+        ++i;
+    }
+    if (_verbose)
+        ibus_wayland_check_ps (&wlim);
+
     if (_display == NULL) {
-        g_printerr ("Failed to connect to Wayland server: %s\n",
-                    g_strerror (errno));
+        fprintf (wlim.log, "Failed to connect to Wayland server: %s\n",
+                 g_strerror (errno));
+        fflush (wlim.log);
+        fclose (wlim.log);
         return EXIT_FAILURE;
     }
 
     _registry = wl_display_get_registry (_display);
-    memset (&wlim, 0, sizeof (wlim));
     wl_registry_add_listener (_registry, &registry_listener, &wlim);
     wl_display_roundtrip (_display);
+    g_usleep (10 * G_USEC_PER_SEC);
     if (wlim.input_method == NULL) {
-        g_printerr ("No input_method global\n");
+        fprintf (wlim.log, "No input_method global\n");
+        fflush (wlim.log);
+        fclose (wlim.log);
         return EXIT_FAILURE;
     }
 
     wlim.xkb_context = xkb_context_new (0);
     if (wlim.xkb_context == NULL) {
-        g_printerr ("Failed to create XKB context\n");
+        fprintf (wlim.log, "Failed to create XKB context\n");
+        fflush (wlim.log);
+        fclose (wlim.log);
         return EXIT_FAILURE;
     }
 
@@ -763,8 +971,8 @@ main (gint    argc,
     g_source_set_can_recurse (source, TRUE);
     g_source_attach (source, NULL);
 
-    g_signal_connect (_bus, "disconnected",
-                      G_CALLBACK (_bus_disconnected_cb), NULL);
+    fflush (wlim.log);
+    fclose (wlim.log);
     ibus_main ();
 
     return EXIT_SUCCESS;
