@@ -251,6 +251,7 @@ main (gint argc, gchar **argv)
             break;
         }
     }
+    bus_component_check ();
     if (!single) {
         /* execute config component */
         if (g_strcmp0 (config, "default") == 0) {
