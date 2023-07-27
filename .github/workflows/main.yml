@@ -6,17 +6,17 @@ on:
   pull_request:
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        container: ["fedora:37", "fedora:38", "ubuntu:jammy"]
-    steps:
-      - name: Check container sha tags
-        run: |
-          docker pull "${{ matrix.container }}"
-          docker inspect "${{ matrix.container }}" --format=${{ '{{.RepoDigests}}{{.Created}}' }}
+  #version:
+  #  runs-on: ubuntu-latest
+  #  strategy:
+  #    fail-fast: false
+  #    matrix:
+  #      container: ["fedora:37", "fedora:38", "ubuntu:jammy"]
+  #  steps:
+  #    - name: Check container sha tags
+  #      run: |
+  #        docker pull "${{ matrix.container }}"
+  #        docker inspect "${{ matrix.container }}" --format=${{ '{{.RepoDigests}}{{.Created}}' }}
 
 
   build:
@@ -26,12 +26,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - container: fedora:38
-            ucd_dir: /usr/share/unicode/ucd
-          - container: fedora:39
-            ucd_dir: /usr/share/unicode/ucd
           - container: ubuntu:jammy
             ucd_dir: /usr/share/unicode
+            #- container: fedora:38
+            #  ucd_dir: /usr/share/unicode/ucd
+            #- container: fedora:39
+            #  ucd_dir: /usr/share/unicode/ucd
 
     container:
       image: ${{ matrix.container }}
@@ -175,7 +175,7 @@ jobs:
         # bindings/pygobject/IBus.py
         run: >
           export DISABLE_DAEMONIZE_IN_TESTS=1;
-          make -j$(nproc) distcheck
+          make distcheck
           DISTCHECK_CONFIGURE_FLAGS="
           --enable-gtk-doc
           --disable-schemas-install
@@ -188,5 +188,6 @@ jobs:
           ibus-compose ibus-keypress test-stress xkb-latin-layouts
           "
           VERBOSE=1
+          V=1
           DESTDIR="$HOME/build/$USER/dest"
 
