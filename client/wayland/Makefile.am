@@ -86,6 +86,7 @@ libibuswaylandim_la_CPPFLAGS = \
 libibuswaylandim_la_LIBADD = \
     $(GIO2_LIBS) \
     $(WAYLAND_LIBS) \
+    $(libibus) \
     $(NULL)
 libibuswaylandim_la_LDFLAGS =                   \
     -no-undefined                               \
