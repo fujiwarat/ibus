@@ -83,6 +83,7 @@ struct _IBusEngineSimplePrivate {
     IBusEngineDict     *emoji_dict;
     IBusLookupTable    *lookup_table;
     gboolean            lookup_table_visible;
+    IBusText           *updated_preedit;
 };
 
 guint COMPOSE_BUFFER_SIZE = 20;
@@ -140,19 +141,20 @@ ibus_engine_simple_class_init (IBusEngineSimpleClass *class)
 static void
 ibus_engine_simple_init (IBusEngineSimple *simple)
 {
+    IBusEngineSimplePrivate *priv;
     GBytes *data;
     GError *error = NULL;
     const char *contents;
     gsize length = 0;
     IBusComposeTableEx *en_compose_table;
 
-    simple->priv = IBUS_ENGINE_SIMPLE_GET_PRIVATE (simple);
-    simple->priv->compose_buffer = g_new0 (guint, COMPOSE_BUFFER_SIZE + 1);
-    simple->priv->hex_mode_enabled =
+    priv = simple->priv = IBUS_ENGINE_SIMPLE_GET_PRIVATE (simple);
+    priv->compose_buffer = g_new0 (guint, COMPOSE_BUFFER_SIZE + 1);
+    priv->hex_mode_enabled =
         g_getenv("IBUS_ENABLE_CTRL_SHIFT_U") != NULL ||
         g_getenv("IBUS_ENABLE_CONTROL_SHIFT_U") != NULL;
-    simple->priv->tentative_match = g_string_new ("");
-    simple->priv->tentative_match_len = 0;
+    priv->tentative_match = g_string_new ("");
+    priv->tentative_match_len = 0;
     data = g_resources_lookup_data ("/org/freedesktop/ibus/compose/sequences",
                                     G_RESOURCE_LOOKUP_FLAGS_NONE,
                                     &error);
@@ -169,6 +171,8 @@ ibus_engine_simple_init (IBusEngineSimple *simple)
         global_tables = ibus_compose_table_list_add_table (global_tables,
                                                            en_compose_table);
     }
+    priv->updated_preedit = ibus_text_new_from_string ("");
+    g_object_ref_sink (priv->updated_preedit);
 }
 
 
@@ -228,6 +232,9 @@ ibus_engine_simple_reset (IBusEngine *engine)
         priv->tentative_match_len = 0;
     }
     ibus_engine_hide_preedit_text ((IBusEngine *)simple);
+    g_object_unref (priv->updated_preedit);
+    simple->priv->updated_preedit = ibus_text_new_from_string ("");
+    g_object_ref_sink (simple->priv->updated_preedit);
 }
 
 static void
@@ -318,7 +325,10 @@ ibus_engine_simple_update_preedit_text (IBusEngineSimple *simple)
         int len = strlen (priv->tentative_emoji);
         ibus_text_append_attribute (text,
                 IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_SINGLE, 0, len);
+        g_object_ref_sink (text);
         ibus_engine_update_preedit_text ((IBusEngine *)simple, text, len, TRUE);
+        g_object_unref (priv->updated_preedit);
+        priv->updated_preedit = text;
         g_string_free (s, TRUE);
         return;
     } else if (priv->in_compose_sequence) {
@@ -370,7 +380,19 @@ ibus_engine_simple_update_preedit_text (IBusEngineSimple *simple)
     }
 
     if (s->len == 0) {
-        ibus_engine_hide_preedit_text ((IBusEngine *)simple);
+        /* #2536 IBusEngine can inherit IBusEngineSimple for comopse keys.
+         * If the previous preedit is zero, the current preedit does not 
+         * need to be hidden here at least because ibus-daemon could have
+         * another preedit for the child IBusEnigne likes m17n and caclling
+         * ibus_engine_hide_preedit_text() here could cause a reset of
+         * the cursor position in ibus-daemon.
+         */
+        if (strlen (priv->updated_preedit->text)) {
+            ibus_engine_hide_preedit_text ((IBusEngine *)simple);
+            g_object_unref (priv->updated_preedit);
+            priv->updated_preedit = ibus_text_new_from_string ("");
+            g_object_ref_sink (priv->updated_preedit);
+        }
     } else if (s->len >= G_MAXINT) {
         g_warning ("%s is too long compose length: %lu", s->str, s->len);
     } else {
@@ -378,7 +400,10 @@ ibus_engine_simple_update_preedit_text (IBusEngineSimple *simple)
         IBusText *text = ibus_text_new_from_string (s->str);
         ibus_text_append_attribute (text,
                 IBUS_ATTR_TYPE_UNDERLINE, IBUS_ATTR_UNDERLINE_SINGLE, 0, len);
+        g_object_ref_sink (text);
         ibus_engine_update_preedit_text ((IBusEngine *)simple, text, len, TRUE);
+        g_object_unref (priv->updated_preedit);
+        priv->updated_preedit = text;
     }
     g_string_free (s, TRUE);
 }
