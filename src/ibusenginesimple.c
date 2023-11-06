@@ -387,7 +387,7 @@ ibus_engine_simple_update_preedit_text (IBusEngineSimple *simple)
          * ibus_engine_hide_preedit_text() here could cause a reset of
          * the cursor position in ibus-daemon.
          */
-        if (strlen (priv->updated_preedit->text)) {
+        if (priv->updated_preedit && strlen (priv->updated_preedit->text)) {
             ibus_engine_hide_preedit_text ((IBusEngine *)simple);
             g_object_unref (priv->updated_preedit);
             priv->updated_preedit = ibus_text_new_from_string ("");
