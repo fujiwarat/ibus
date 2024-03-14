@@ -143,7 +143,13 @@ jobs:
             $DNF -y install $PACKAGES
             rpm -q gnome-shell
             V=$(rpm -q gnome-shell | sed -e 's/gnome-shell-\([0-9]*\)[.-~].*/\1/')
-            grep $V /usr/share/gnome-shell/extensions/no-overview@fthx/metadata.json
+            GNOME_SHELL_METADATA=/usr/share/gnome-shell/extensions/no-overview@fthx/metadata.json
+            if ! grep $V $GNOME_SHELL_METADATA ; then
+                # Fedora beta lock could take long time.
+                $DNF -y update --enablerepo=updates-testing gnome-shell-extension-no-overview
+                sleep 1
+                grep $V $GNOME_SHELL_METADATA
+            fi
             ;;
           *)
             echo "Not supported ${{ matrix.container }}"
