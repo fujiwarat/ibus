@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ibuskeysyms.h"
-#include "keyname-table.h"
+#include "keynamesprivate.h"
 #include "ibuskeys.h"
 
 #define IBUS_NUM_KEYS G_N_ELEMENTS (gdk_keys_by_keyval)
