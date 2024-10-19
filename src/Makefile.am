@@ -3,7 +3,7 @@
 # ibus - The Input Bus
 #
 # Copyright (c) 2007-2015 Peng Huang <shawn.p.huang@gmail.com>
-# Copyright (c) 2015-2023 Takao Fujiwara <takao.fujiwara1@gmail.com>
+# Copyright (c) 2015-2024 Takao Fujiwara <takao.fujiwara1@gmail.com>
 # Copyright (c) 2007-2017 Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
@@ -90,7 +90,7 @@ ibus_sources =              \
     ibushotkey.c            \
     ibusinputcontext.c      \
     ibuskeymap.c            \
-    ibuskeynames.c          \
+    ibuskeys.c              \
     ibuskeyuni.c            \
     ibuslookuptable.c       \
     ibusobject.c            \
@@ -185,7 +185,7 @@ ibus_private_headers =          \
     ibusinternal.h              \
     ibusresources.h             \
     ibusunicodegen.h            \
-    keyname-table.h             \
+    keynamesprivate.h           \
     $(NULL)
 noinst_HEADERS =            \
     $(ibus_private_headers) \
@@ -224,7 +224,7 @@ gen_internal_compose_table_SOURCES = \
     gencomposetable.c   \
     ibuscomposetable.c  \
     ibuserror.c         \
-    ibuskeynames.c      \
+    ibuskeys.c          \
     ibuskeyuni.c        \
     ibusenumtypes.h     \
     $(NULL)

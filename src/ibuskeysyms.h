@@ -2,7 +2,8 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (C) 2008-2013 Peng Huang <shawn.p.huang@gmail.com>
- * Copyright (C) 2008-2013 Red Hat, Inc.
+ * Copyright (C) 2013-2024 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (C) 2008-2024 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -69,9 +70,9 @@
 #define IBUS_KEY_Right 0xff53
 #define IBUS_KEY_Down 0xff54
 #define IBUS_KEY_Prior 0xff55
-#define IBUS_KEY_Page_Up 0xff55
+#define IBUS_KEY_Page_Up 0xff55 /* deprecated */
 #define IBUS_KEY_Next 0xff56
-#define IBUS_KEY_Page_Down 0xff56
+#define IBUS_KEY_Page_Down 0xff56 /* deprecated */
 #define IBUS_KEY_End 0xff57
 #define IBUS_KEY_Begin 0xff58
 #define IBUS_KEY_Select 0xff60
@@ -101,9 +102,9 @@
 #define IBUS_KEY_KP_Right 0xff98
 #define IBUS_KEY_KP_Down 0xff99
 #define IBUS_KEY_KP_Prior 0xff9a
-#define IBUS_KEY_KP_Page_Up 0xff9a
+#define IBUS_KEY_KP_Page_Up 0xff9a /* deprecated */
 #define IBUS_KEY_KP_Next 0xff9b
-#define IBUS_KEY_KP_Page_Down 0xff9b
+#define IBUS_KEY_KP_Page_Down 0xff9b /* deprecated */
 #define IBUS_KEY_KP_End 0xff9c
 #define IBUS_KEY_KP_Begin 0xff9d
 #define IBUS_KEY_KP_Insert 0xff9e
@@ -136,55 +137,55 @@
 #define IBUS_KEY_F9 0xffc6
 #define IBUS_KEY_F10 0xffc7
 #define IBUS_KEY_F11 0xffc8
-#define IBUS_KEY_L1 0xffc8
+#define IBUS_KEY_L1 0xffc8 /* deprecated */
 #define IBUS_KEY_F12 0xffc9
-#define IBUS_KEY_L2 0xffc9
+#define IBUS_KEY_L2 0xffc9 /* deprecated */
 #define IBUS_KEY_F13 0xffca
-#define IBUS_KEY_L3 0xffca
+#define IBUS_KEY_L3 0xffca /* deprecated */
 #define IBUS_KEY_F14 0xffcb
-#define IBUS_KEY_L4 0xffcb
+#define IBUS_KEY_L4 0xffcb /* deprecated */
 #define IBUS_KEY_F15 0xffcc
-#define IBUS_KEY_L5 0xffcc
+#define IBUS_KEY_L5 0xffcc /* deprecated */
 #define IBUS_KEY_F16 0xffcd
-#define IBUS_KEY_L6 0xffcd
+#define IBUS_KEY_L6 0xffcd /* deprecated */
 #define IBUS_KEY_F17 0xffce
-#define IBUS_KEY_L7 0xffce
+#define IBUS_KEY_L7 0xffce /* deprecated */
 #define IBUS_KEY_F18 0xffcf
-#define IBUS_KEY_L8 0xffcf
+#define IBUS_KEY_L8 0xffcf /* deprecated */
 #define IBUS_KEY_F19 0xffd0
-#define IBUS_KEY_L9 0xffd0
+#define IBUS_KEY_L9 0xffd0 /* deprecated */
 #define IBUS_KEY_F20 0xffd1
-#define IBUS_KEY_L10 0xffd1
+#define IBUS_KEY_L10 0xffd1 /* deprecated */
 #define IBUS_KEY_F21 0xffd2
-#define IBUS_KEY_R1 0xffd2
+#define IBUS_KEY_R1 0xffd2 /* deprecated */
 #define IBUS_KEY_F22 0xffd3
-#define IBUS_KEY_R2 0xffd3
+#define IBUS_KEY_R2 0xffd3 /* deprecated */
 #define IBUS_KEY_F23 0xffd4
-#define IBUS_KEY_R3 0xffd4
+#define IBUS_KEY_R3 0xffd4 /* deprecated */
 #define IBUS_KEY_F24 0xffd5
-#define IBUS_KEY_R4 0xffd5
+#define IBUS_KEY_R4 0xffd5 /* deprecated */
 #define IBUS_KEY_F25 0xffd6
-#define IBUS_KEY_R5 0xffd6
+#define IBUS_KEY_R5 0xffd6 /* deprecated */
 #define IBUS_KEY_F26 0xffd7
-#define IBUS_KEY_R6 0xffd7
+#define IBUS_KEY_R6 0xffd7 /* deprecated */
 #define IBUS_KEY_F27 0xffd8
-#define IBUS_KEY_R7 0xffd8
+#define IBUS_KEY_R7 0xffd8 /* deprecated */
 #define IBUS_KEY_F28 0xffd9
-#define IBUS_KEY_R8 0xffd9
+#define IBUS_KEY_R8 0xffd9 /* deprecated */
 #define IBUS_KEY_F29 0xffda
-#define IBUS_KEY_R9 0xffda
+#define IBUS_KEY_R9 0xffda /* deprecated */
 #define IBUS_KEY_F30 0xffdb
-#define IBUS_KEY_R10 0xffdb
+#define IBUS_KEY_R10 0xffdb /* deprecated */
 #define IBUS_KEY_F31 0xffdc
-#define IBUS_KEY_R11 0xffdc
+#define IBUS_KEY_R11 0xffdc /* deprecated */
 #define IBUS_KEY_F32 0xffdd
-#define IBUS_KEY_R12 0xffdd
+#define IBUS_KEY_R12 0xffdd /* deprecated */
 #define IBUS_KEY_F33 0xffde
-#define IBUS_KEY_R13 0xffde
+#define IBUS_KEY_R13 0xffde /* deprecated */
 #define IBUS_KEY_F34 0xffdf
-#define IBUS_KEY_R14 0xffdf
+#define IBUS_KEY_R14 0xffdf /* deprecated */
 #define IBUS_KEY_F35 0xffe0
-#define IBUS_KEY_R15 0xffe0
+#define IBUS_KEY_R15 0xffe0 /* deprecated */
 #define IBUS_KEY_Shift_L 0xffe1
 #define IBUS_KEY_Shift_R 0xffe2
 #define IBUS_KEY_Control_L 0xffe3
@@ -288,9 +289,12 @@
 #define IBUS_KEY_dead_O 0xfe87
 #define IBUS_KEY_dead_u 0xfe88
 #define IBUS_KEY_dead_U 0xfe89
-#define IBUS_KEY_dead_small_schwa 0xfe8a
-#define IBUS_KEY_dead_capital_schwa 0xfe8b
+#define IBUS_KEY_dead_schwa 0xfe8a
+#define IBUS_KEY_dead_small_schwa 0xfe8a /* deprecated */
+#define IBUS_KEY_dead_SCHWA 0xfe8b
+#define IBUS_KEY_dead_capital_schwa 0xfe8b /* deprecated */
 #define IBUS_KEY_dead_greek 0xfe8c
+#define IBUS_KEY_dead_hamza 0xfe8d
 #define IBUS_KEY_First_Virtual_Screen 0xfed0
 #define IBUS_KEY_Prev_Virtual_Screen 0xfed1
 #define IBUS_KEY_Next_Virtual_Screen 0xfed2
@@ -481,7 +485,8 @@
 #define IBUS_KEY_diaeresis 0x0a8
 #define IBUS_KEY_copyright 0x0a9
 #define IBUS_KEY_ordfeminine 0x0aa
-#define IBUS_KEY_guillemotleft 0x0ab
+#define IBUS_KEY_guillemetleft 0x0ab
+#define IBUS_KEY_guillemotleft 0x0ab /* deprecated */
 #define IBUS_KEY_notsign 0x0ac
 #define IBUS_KEY_hyphen 0x0ad
 #define IBUS_KEY_registered 0x0ae
@@ -496,8 +501,10 @@
 #define IBUS_KEY_periodcentered 0x0b7
 #define IBUS_KEY_cedilla 0x0b8
 #define IBUS_KEY_onesuperior 0x0b9
-#define IBUS_KEY_masculine 0x0ba
-#define IBUS_KEY_guillemotright 0x0bb
+#define IBUS_KEY_masculine 0x0ba /* deprecated */
+#define IBUS_KEY_ordmasculine 0x0ba
+#define IBUS_KEY_guillemetright 0x0bb
+#define IBUS_KEY_guillemotright 0x0bb /* deprecated */
 #define IBUS_KEY_onequarter 0x0bc
 #define IBUS_KEY_onehalf 0x0bd
 #define IBUS_KEY_threequarters 0x0be
@@ -528,7 +535,7 @@
 #define IBUS_KEY_Odiaeresis 0x0d6
 #define IBUS_KEY_multiply 0x0d7
 #define IBUS_KEY_Oslash 0x0d8
-#define IBUS_KEY_Ooblique 0x0d8
+#define IBUS_KEY_Ooblique 0x0d8 /* deprecated */
 #define IBUS_KEY_Ugrave 0x0d9
 #define IBUS_KEY_Uacute 0x0da
 #define IBUS_KEY_Ucircumflex 0x0db
@@ -562,7 +569,7 @@
 #define IBUS_KEY_odiaeresis 0x0f6
 #define IBUS_KEY_division 0x0f7
 #define IBUS_KEY_oslash 0x0f8
-#define IBUS_KEY_ooblique 0x0f8
+#define IBUS_KEY_ooblique 0x0f8 /* deprecated */
 #define IBUS_KEY_ugrave 0x0f9
 #define IBUS_KEY_uacute 0x0fa
 #define IBUS_KEY_ucircumflex 0x0fb
@@ -871,7 +878,7 @@
 #define IBUS_KEY_Arabic_noon_ghunna 0x10006ba
 #define IBUS_KEY_Arabic_heh_doachashmee 0x10006be
 #define IBUS_KEY_Farsi_yeh 0x10006cc
-#define IBUS_KEY_Arabic_farsi_yeh 0x10006cc
+#define IBUS_KEY_Arabic_farsi_yeh 0x10006cc /* deprecated */
 #define IBUS_KEY_Arabic_yeh_baree 0x10006d2
 #define IBUS_KEY_Arabic_heh_goal 0x10006c1
 #define IBUS_KEY_Arabic_switch 0xff7e
@@ -909,47 +916,47 @@
 #define IBUS_KEY_Macedonia_gje 0x6a2
 #define IBUS_KEY_Cyrillic_io 0x6a3
 #define IBUS_KEY_Ukrainian_ie 0x6a4
-#define IBUS_KEY_Ukranian_je 0x6a4
+#define IBUS_KEY_Ukranian_ie 0x6a4 /* deprecated */
 #define IBUS_KEY_Macedonia_dse 0x6a5
 #define IBUS_KEY_Ukrainian_i 0x6a6
-#define IBUS_KEY_Ukranian_i 0x6a6
+#define IBUS_KEY_Ukranian_i 0x6a6 /* deprecated */
 #define IBUS_KEY_Ukrainian_yi 0x6a7
-#define IBUS_KEY_Ukranian_yi 0x6a7
+#define IBUS_KEY_Ukranian_yi 0x6a7 /* deprecated */
 #define IBUS_KEY_Cyrillic_je 0x6a8
-#define IBUS_KEY_Serbian_je 0x6a8
+#define IBUS_KEY_Serbian_je 0x6a8 /* deprecated */
 #define IBUS_KEY_Cyrillic_lje 0x6a9
-#define IBUS_KEY_Serbian_lje 0x6a9
+#define IBUS_KEY_Serbian_lje 0x6a9 /* deprecated */
 #define IBUS_KEY_Cyrillic_nje 0x6aa
-#define IBUS_KEY_Serbian_nje 0x6aa
+#define IBUS_KEY_Serbian_nje 0x6aa /* deprecated */
 #define IBUS_KEY_Serbian_tshe 0x6ab
 #define IBUS_KEY_Macedonia_kje 0x6ac
 #define IBUS_KEY_Ukrainian_ghe_with_upturn 0x6ad
 #define IBUS_KEY_Byelorussian_shortu 0x6ae
 #define IBUS_KEY_Cyrillic_dzhe 0x6af
-#define IBUS_KEY_Serbian_dze 0x6af
+#define IBUS_KEY_Serbian_dze 0x6af /* deprecated */
 #define IBUS_KEY_numerosign 0x6b0
 #define IBUS_KEY_Serbian_DJE 0x6b1
 #define IBUS_KEY_Macedonia_GJE 0x6b2
 #define IBUS_KEY_Cyrillic_IO 0x6b3
 #define IBUS_KEY_Ukrainian_IE 0x6b4
-#define IBUS_KEY_Ukranian_JE 0x6b4
+#define IBUS_KEY_Ukranian_JE 0x6b4 /* deprecated */
 #define IBUS_KEY_Macedonia_DSE 0x6b5
 #define IBUS_KEY_Ukrainian_I 0x6b6
-#define IBUS_KEY_Ukranian_I 0x6b6
+#define IBUS_KEY_Ukranian_I 0x6b6 /* deprecated */
 #define IBUS_KEY_Ukrainian_YI 0x6b7
-#define IBUS_KEY_Ukranian_YI 0x6b7
+#define IBUS_KEY_Ukranian_YI 0x6b7 /* deprecated */
 #define IBUS_KEY_Cyrillic_JE 0x6b8
-#define IBUS_KEY_Serbian_JE 0x6b8
+#define IBUS_KEY_Serbian_JE 0x6b8 /* deprecated */
 #define IBUS_KEY_Cyrillic_LJE 0x6b9
-#define IBUS_KEY_Serbian_LJE 0x6b9
+#define IBUS_KEY_Serbian_LJE 0x6b9 /* deprecated */
 #define IBUS_KEY_Cyrillic_NJE 0x6ba
-#define IBUS_KEY_Serbian_NJE 0x6ba
+#define IBUS_KEY_Serbian_NJE 0x6ba /* deprecated */
 #define IBUS_KEY_Serbian_TSHE 0x6bb
 #define IBUS_KEY_Macedonia_KJE 0x6bc
 #define IBUS_KEY_Ukrainian_GHE_WITH_UPTURN 0x6bd
 #define IBUS_KEY_Byelorussian_SHORTU 0x6be
 #define IBUS_KEY_Cyrillic_DZHE 0x6bf
-#define IBUS_KEY_Serbian_DZE 0x6bf
+#define IBUS_KEY_Serbian_DZE 0x6bf /* deprecated */
 #define IBUS_KEY_Cyrillic_yu 0x6c0
 #define IBUS_KEY_Cyrillic_a 0x6c1
 #define IBUS_KEY_Cyrillic_be 0x6c2
@@ -1019,7 +1026,7 @@
 #define IBUS_KEY_Greek_ETAaccent 0x7a3
 #define IBUS_KEY_Greek_IOTAaccent 0x7a4
 #define IBUS_KEY_Greek_IOTAdieresis 0x7a5
-#define IBUS_KEY_Greek_IOTAdiaeresis 0x7a5
+#define IBUS_KEY_Greek_IOTAdiaeresis 0x7a5 /* deprecated */
 #define IBUS_KEY_Greek_OMICRONaccent 0x7a7
 #define IBUS_KEY_Greek_UPSILONaccent 0x7a8
 #define IBUS_KEY_Greek_UPSILONdieresis 0x7a9
@@ -1363,7 +1370,7 @@
 #define IBUS_KEY_Thai_sarau 0xdd8
 #define IBUS_KEY_Thai_sarauu 0xdd9
 #define IBUS_KEY_Thai_phinthu 0xdda
-#define IBUS_KEY_Thai_maihanakat_maitho 0xdde
+#define IBUS_KEY_Thai_maihanakat_maitho 0xdde /* deprecated */
 #define IBUS_KEY_Thai_baht 0xddf
 #define IBUS_KEY_Thai_sarae 0xde0
 #define IBUS_KEY_Thai_saraae 0xde1
@@ -1498,17 +1505,17 @@
 #define IBUS_KEY_Korean_Won 0xeff
 #define IBUS_KEY_Armenian_ligature_ew 0x1000587
 #define IBUS_KEY_Armenian_full_stop 0x1000589
-#define IBUS_KEY_Armenian_verjaket 0x1000589
+#define IBUS_KEY_Armenian_verjaket 0x1000589 /* deprecated */
 #define IBUS_KEY_Armenian_separation_mark 0x100055d
-#define IBUS_KEY_Armenian_but 0x100055d
+#define IBUS_KEY_Armenian_but 0x100055d /* deprecated */
 #define IBUS_KEY_Armenian_hyphen 0x100058a
-#define IBUS_KEY_Armenian_yentamna 0x100058a
+#define IBUS_KEY_Armenian_yentamna 0x100058a /* deprecated */
 #define IBUS_KEY_Armenian_exclam 0x100055c
-#define IBUS_KEY_Armenian_amanak 0x100055c
+#define IBUS_KEY_Armenian_amanak 0x100055c /* deprecated */
 #define IBUS_KEY_Armenian_accent 0x100055b
-#define IBUS_KEY_Armenian_shesht 0x100055b
+#define IBUS_KEY_Armenian_shesht 0x100055b /* deprecated */
 #define IBUS_KEY_Armenian_question 0x100055e
-#define IBUS_KEY_Armenian_paruyk 0x100055e
+#define IBUS_KEY_Armenian_paruyk 0x100055e /* deprecated */
 #define IBUS_KEY_Armenian_AYB 0x1000531
 #define IBUS_KEY_Armenian_ayb 0x1000561
 #define IBUS_KEY_Armenian_BEN 0x1000532
@@ -1735,6 +1742,11 @@
 #define IBUS_KEY_ohorn 0x10001a1
 #define IBUS_KEY_Uhorn 0x10001af
 #define IBUS_KEY_uhorn 0x10001b0
+#define IBUS_KEY_combining_tilde 0x1000303
+#define IBUS_KEY_combining_grave 0x1000300
+#define IBUS_KEY_combining_acute 0x1000301
+#define IBUS_KEY_combining_hook 0x1000309
+#define IBUS_KEY_combining_belowdot 0x1000323
 #define IBUS_KEY_EcuSign 0x10020a0
 #define IBUS_KEY_ColonSign 0x10020a1
 #define IBUS_KEY_CruzeiroSign 0x10020a2
