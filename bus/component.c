@@ -40,6 +40,17 @@ enum {
     PROP_FACTORY,
 };
 
+enum
+{
+    CHILD_CHDIR_FAILED,
+    CHILD_EXEC_FAILED,
+    CHILD_OPEN_FAILED,
+    CHILD_DUP2_FAILED,
+    CHILD_FORK_FAILED,
+    CHILD_CLOSE_FAILED,
+    GENERIC_ERROR = -1
+};
+
 struct _BusComponent {
     IBusObject parent;
 
@@ -80,6 +91,8 @@ static void     bus_component_get_property  (BusComponent          *component,
                                              GValue                *value,
                                              GParamSpec            *pspec);
 static void     bus_component_destroy       (BusComponent          *component);
+
+static GSpawnFlags compose_start_flags = G_SPAWN_DO_NOT_REAP_CHILD;
 
 G_DEFINE_TYPE (BusComponent, bus_component, IBUS_TYPE_OBJECT)
 
@@ -337,49 +350,76 @@ bus_component_child_cb (GPid          pid,
     }
 }
 
-gboolean
-bus_component_start (BusComponent *component,
-                     gboolean      verbose)
+static int
+bus_component_check_start (BusComponent *component,
+                           gboolean      verbose,
+                           gboolean      output_warning)
 {
+    int argc;
+    gchar **argv;
+    gboolean retval;
+    GError *error = NULL;
+    int error_code = 0;
+
     g_assert (BUS_IS_COMPONENT (component));
 
     if (component->pid != 0)
-        return TRUE;
+        return 0;
 
     component->verbose = verbose;
 
-    gint argc;
-    gchar **argv;
-    gboolean retval;
-
-    GError *error = NULL;
     if (!g_shell_parse_argv (ibus_component_get_exec (component->component),
                              &argc,
                              &argv,
                              &error)) {
-        g_warning ("Can not parse component %s exec: %s",
-                   ibus_component_get_name (component->component),
-                   error->message);
+        if (output_warning) {
+            g_warning ("Can not parse component %s exec: %s",
+                       ibus_component_get_name (component->component),
+                       error->message);
+        }
         g_error_free (error);
-        return FALSE;
+        return GENERIC_ERROR;
     }
 
     error = NULL;
-    GSpawnFlags flags = G_SPAWN_DO_NOT_REAP_CHILD;
     if (!verbose) {
-        flags |= G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL;
+        compose_start_flags |=
+                G_SPAWN_STDOUT_TO_DEV_NULL| G_SPAWN_STDERR_TO_DEV_NULL;
     }
     retval = g_spawn_async (NULL, argv, NULL,
-                            flags,
+                            compose_start_flags,
                             NULL, NULL,
                             &(component->pid), &error);
     g_strfreev (argv);
     if (!retval) {
-        g_warning ("Can not execute component %s: %s",
-                   ibus_component_get_name (component->component),
-                   error->message);
+        if (output_warning) {
+            g_warning ("Can not execute component %s: %s",
+                       ibus_component_get_name (component->component),
+                       error->message);
+            error_code = GENERIC_ERROR;
+        } else if (g_strstr_len (error->message, -1,
+                          "Failed to change to directory")) {
+            error_code = CHILD_CHDIR_FAILED;
+        } else if (g_strstr_len (error->message, -1,
+                          "Failed to execute child process")) {
+            error_code = CHILD_EXEC_FAILED;
+        } else if (g_strstr_len (error->message, -1,
+                          "Failed to open file")) {
+            error_code = CHILD_OPEN_FAILED;
+        } else if (g_strstr_len (error->message, -1,
+                          "Failed to duplicate file")) {
+            error_code = CHILD_DUP2_FAILED;
+        } else if (g_strstr_len (error->message, -1,
+                          "Failed to fork")) {
+            error_code = CHILD_FORK_FAILED;
+        } else if (g_strstr_len (error->message, -1,
+                          "Failed to close file")) {
+            error_code = CHILD_CLOSE_FAILED;
+        } else {
+            error_code = GENERIC_ERROR;
+        }
         g_error_free (error);
-        return FALSE;
+        return error_code;
     }
 
     component->child_source_id =
@@ -387,7 +427,15 @@ bus_component_start (BusComponent *component,
                            (GChildWatchFunc) bus_component_child_cb,
                            component);
 
-    return TRUE;
+    return 0;
+}
+
+gboolean
+bus_component_start (BusComponent *component,
+                     gboolean      verbose)
+{
+    return (bus_component_check_start (component, verbose, TRUE) == 0)
+            ? TRUE: FALSE;
 }
 
 gboolean
@@ -421,4 +469,36 @@ bus_component_from_engine_desc (IBusEngineDesc *engine)
     }
 
     return (BusComponent *) g_object_get_qdata ((GObject *) engine, quark);
+}
+
+int
+bus_component_check (void)
+{
+    IBusComponent *ibuscomponent = ibus_component_new (
+            "test_can_close_fd",
+            "test if bus_component_start can close child file descriptor",
+            "1.0",
+            "LGPL-2.0-or-later",
+            "Takao Fujiwara",
+            "https://github.com/ibus/ibus",
+            "/bin/echo test",
+            "ibus10");
+    BusComponent *component;
+    int error_code;
+
+    g_return_val_if_fail (ibuscomponent, GENERIC_ERROR);
+    component = bus_component_new (ibuscomponent, NULL);
+    error_code = bus_component_check_start (component, FALSE, FALSE);
+    g_object_unref (component);
+    /* Workaround to set G_SPAWN_LEAVE_DESCRIPTORS_OPEN
+     * Currently g_spawn_async() is failed in GitHub action + Docker
+     * with the error message:
+     * Failed to close file descriptor for child process (Operation not permitted)
+     * I have no idea why closing the file description is failed
+     * although g_spawn_async() works in Docker by manual.
+     * G_SPAWN_LEAVE_DESCRIPTORS_OPEN flag avoids to close fds.
+     */
+    if (error_code == CHILD_CLOSE_FAILED)
+        compose_start_flags |= G_SPAWN_LEAVE_DESCRIPTORS_OPEN;
+    return error_code;
 }
