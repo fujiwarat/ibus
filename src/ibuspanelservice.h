@@ -2,7 +2,7 @@
 /* vim:set et sts=4: */
 /* ibus - The Input Bus
  * Copyright (c) 2009-2014 Google Inc. All rights reserved.
- * Copyright (c) 2017-2024 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (c) 2017-2025 Takao Fujiwara <takao.fujiwara1@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -36,6 +36,7 @@
  * Developers can "extend" this class for panel UI development.
  */
 #include "ibuslookuptable.h"
+#include "ibusmessage.h"
 #include "ibusservice.h"
 #include "ibusproplist.h"
 #include "ibusxevent.h"
@@ -59,6 +60,23 @@
     (G_TYPE_INSTANCE_GET_CLASS ((obj), IBUS_TYPE_PANEL_SERVICE, IBusPanelServiceClass))
 
 G_BEGIN_DECLS
+
+/**
+ * IBusPanelServiceMsgCode:
+ * @IBUS_PANEL_SERVICE_MSG_CODE_GENERAL: Generic message for Panel
+ * @IBUS_PANEL_SERVICE_MSG_CODE_LOADING_UNICODE: Progress message when the
+ *         Unicode data is loading.
+ *
+ * Message codes in the `IBusMessageDomain` domain for Panel.
+ *
+ * Since: 1.5.33
+ */
+typedef enum
+{
+  IBUS_PANEL_SERVICE_MSG_CODE_GENERAL,
+  IBUS_PANEL_SERVICE_MSG_CODE_LOADING_UNICODE
+} IBusPanelServiceMsgCode;
+
 
 typedef struct _IBusPanelService IBusPanelService;
 typedef struct _IBusPanelServiceClass IBusPanelServiceClass;
@@ -378,5 +396,16 @@ void ibus_panel_service_forward_process_key_event
                                            guint32           keyval,
                                            guint32           keycode,
                                            guint32           state);
+
+/**
+ * ibus_panel_service_send_message:
+ * @panel: An #IBusPanelService.
+ * @message: An #IBusMessage.
+ *
+ * Send a message to the Panel for the focus-less notification popup.
+ * This is used for the emoji component in Wayland mainly but in Xorg too.
+ */
+void ibus_panel_service_send_message      (IBusPanelService *panel,
+                                           IBusMessage      *message);
 G_END_DECLS
 #endif

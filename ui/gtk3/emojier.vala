@@ -2,7 +2,7 @@
  *
  * ibus - The Input Bus
  *
- * Copyright (c) 2017-2023 Takao Fujiwara <takao.fujiwara1@gmail.com>
+ * Copyright (c) 2017-2025 Takao Fujiwara <takao.fujiwara1@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -363,6 +363,7 @@ public class IBusEmojier : Gtk.ApplicationWindow {
     private uint m_unicode_progress_id;
     private Gtk.Label m_unicode_percent_label;
     private double m_unicode_percent;
+    private ulong m_unicode_deserialize_unicode_signal_id;
     private Gdk.Rectangle m_cursor_location;
     private bool m_is_up_side_down = false;
     private uint m_redraw_window_id;
@@ -372,6 +373,7 @@ public class IBusEmojier : Gtk.ApplicationWindow {
     public signal void candidate_clicked(uint index, uint button, uint state);
     public signal void commit_text(string text);
     public signal void cancel();
+    public signal void send_message(IBus.Message message);
 
     public IBusEmojier(bool is_wayland) {
         GLib.Object(
@@ -1229,9 +1231,13 @@ public class IBusEmojier : Gtk.ApplicationWindow {
         hbox.pack_start(m_unicode_percent_label, false, true, 0);
         hbox.show_all();
 
-        m_unicode_progress_object.deserialize_unicode.connect((i, n) => {
-            m_unicode_percent = (double)i / n;
-        });
+        if (m_unicode_deserialize_unicode_signal_id == 0) {
+            m_unicode_deserialize_unicode_signal_id =
+                    m_unicode_progress_object.deserialize_unicode.connect(
+                            (i, n) => {
+                                m_unicode_percent = (double)i / n;
+                    });
+        }
         if (m_unicode_progress_id > 0) {
             GLib.Source.remove(m_unicode_progress_id);
         }
@@ -1247,6 +1253,18 @@ public class IBusEmojier : Gtk.ApplicationWindow {
             }
             return !m_loaded_unicode;
         });
+    }
+
+
+    private void show_unicode_popup(int progress) {
+        var message = new IBus.Message(IBus.MessageDomain.PANEL,
+                                       IBus.PanelServiceMsgCode.LOADING_UNICODE,
+                                       _("IBus Emoji initialization"),
+                                       _("Loading a Unicode dictionary:"),
+                                       "timeout", 3,
+                                       "progress", progress,
+                                       "serial", 50001);
+        send_message(message);
     }
 
 
@@ -1287,7 +1305,7 @@ public class IBusEmojier : Gtk.ApplicationWindow {
                                      ref GLib.SList<string>? emojis,
                                      bool                    do_sort);
 
-    private static GLib.SList<string>?
+    private GLib.SList<string>?
     lookup_emojis_from_annotation(string annotation) {
         GLib.SList<string>? total_emojis = null;
         GLib.SList<string>? non_glyph_emojis = null;
@@ -1383,6 +1401,16 @@ public class IBusEmojier : Gtk.ApplicationWindow {
                 total_emojis.append(emoji);
             }
         }
+        if (!m_loaded_unicode && m_unicode_deserialize_unicode_signal_id == 0) {
+            m_unicode_deserialize_unicode_signal_id =
+                    m_unicode_progress_object.deserialize_unicode.connect(
+                            (i, n) => {
+                                m_unicode_percent = (double)i / n;
+                                show_unicode_popup((int)(m_unicode_percent * 100));
+                    });
+        }
+        if (!m_loaded_unicode)
+            show_unicode_popup(0);
         return total_emojis;
     }
 

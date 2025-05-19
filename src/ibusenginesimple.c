@@ -3,7 +3,7 @@
 /* ibus - The Input Bus
  * Copyright (C) 2014 Peng Huang <shawn.p.huang@gmail.com>
  * Copyright (C) 2015-2025 Takao Fujiwara <takao.fujiwara1@gmail.com>
- * Copyright (C) 2014-2017 Red Hat, Inc.
+ * Copyright (C) 2014-2025 Red Hat, Inc.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,6 +24,8 @@
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
+
+#include <glib/gi18n-lib.h>
 
 #include "ibuscomposetable.h"
 #include "ibusemoji.h"
@@ -156,6 +158,29 @@ ibus_engine_simple_class_init (IBusEngineSimpleClass *class)
     contents = g_bytes_get_data (data, &length);
     en_compose_table = ibus_compose_table_deserialize (contents, length);
 }
+
+
+static void
+ibus_engine_simple_send_message_with_code (IBusEngineSimple *simple,
+                                           IBusEngineMsgCode code)
+{
+    IBusMessage *message;
+
+    g_return_if_fail (IBUS_IS_ENGINE_SIMPLE (simple));
+    message = ibus_message_new (
+            IBUS_MESSAGE_DOMAIN_ENGINE,
+            code,
+            _("Detect unregistered character in your compose sequence"),
+            _("The character you just input is not recognized as a valid " \
+              "part of the currently active compose sequence and the " \
+              "character was cancelled. Try inputting the correct character " \
+              "to the compose sequence again, or press Escape key to " \
+              "terminate whole the compose sequence."),
+             "timeout", 5,
+             NULL);
+    ibus_engine_send_message (IBUS_ENGINE (simple), message);
+}
+
 
 static void
 ibus_engine_simple_init (IBusEngineSimple *simple)
@@ -1344,6 +1369,9 @@ ibus_engine_simple_process_key_event (IBusEngine *engine,
             n_compose = n_compose_prev;
             g_assert (n_compose < (COMPOSE_BUFFER_SIZE + 1));
             /* FIXME beep_window (event->window); */
+            ibus_engine_simple_send_message_with_code (
+                    simple,
+                    IBUS_ENGINE_MSG_CODE_INVALID_COMPOSE_SEQUENCE);
             backup_char = priv->compose_buffer[n_compose];
             priv->compose_buffer[n_compose] = 0;
             if (ibus_engine_simple_check_all_compose_table (simple, n_compose))
