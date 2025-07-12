@@ -1,0 +1,17 @@
+#!/bin/sh
+# cat /etc/sudoers.d/tfujiwar
+# tfujiwar ALL=NOPASSWD: /usr/sbin/libinput
+
+DIR=`dirname $0`
+SRCDIR=@SRCDIR@
+
+if [ -f $SRCDIR/libinput-test.yml ] ; then
+    YML=$SRCDIR/libinput-test.yml
+elif [ -f $DIR/libinput-test.yml ] ; then
+    YML=$DIR/libinput-test.yml
+else
+    echo "Not found libinput-test.yml"
+    exit 1
+fi
+
+sudo libinput replay --once --replay-after 1 $YML

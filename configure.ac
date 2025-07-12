@@ -735,13 +735,6 @@ if test x"$enable_libnotify" = x"yes"; then
     enable_libnotify="yes (enabled, use --disable-libnotify to disable)"
 fi
 
-PKG_CHECK_MODULES(XTEST,
-    [x11 xtst],
-    [enable_xtest=yes],
-    [enable_xtest=no]
-)
-AM_CONDITIONAL([ENABLE_XTEST], [test x"$enable_xtest" = x"yes"])
-
 PKG_CHECK_MODULES(XFIXES,
     [x11 xfixes >= 6],
     [AC_DEFINE([HAVE_XFIXES], [1], [Define to enable XFixes])

@@ -74,9 +74,10 @@ endif
 
 if ENABLE_GTK3_OR_4
 TESTS_C += ibus-compose
-if ENABLE_XTEST
 TESTS_C += ibus-keypress
-endif
+noinst_PROGRAMS += ibus-keypress-fixme
+noinst_PROGRAMS += testwindow
+noinst_SCRIPTS += libinput-test.sh
 endif
 
 if ENABLE_GTK4
@@ -98,13 +99,15 @@ test_metas_in = meta.test.in
 
 if ENABLE_INSTALL_TESTS
 bin_SCRIPTS = ibus-desktop-testing-runner
-test_execs = $(TESTS:ibus-compose=ibus-compose-locales)
-test_metas = $(addsuffix .test, $(test_execs))
+_test_execs = $(TESTS:ibus-compose=ibus-compose-locales)
+test_execs = $(_test_execs)
+test_metas = $(addsuffix .test, $(_test_execs))
 test_sources_DATA = \
     $(test_metas) \
     ibus-compose.basic \
     ibus-compose.emoji \
     ibus-compose.env \
+    libinput-test.yml \
     $(NULL)
 test_sourcesdir = $(datadir)/installed-tests/ibus
 
@@ -118,9 +121,22 @@ CLEANFILES += \
 test_execs_PROGRAMS = $(TESTS_C)
 test_execs_SCRIPTS = $(TESTS_SCRIPT)
 if ENABLE_GTK3_OR_4
-test_execs_SCRIPTS += ibus-compose-locales
+test_execs_PROGRAMS += \
+    testwindow \
+    ibus-keypress-fixme \
+    $(NULL)
+test_execs += \
+    testwindow \
+    ibus-keypress-fixme \
+    libinput-test.sh \
+    $(NULL)
+test_execs_SCRIPTS += \
+    ibus-compose-locales \
+    libinput-test.sh \
+    $(NULL)
 CLEANFILES += \
     ibus-compose-locales \
+    libinput-test.sh \
     $(NULL)
 endif
 test_execsdir = $(libexecdir)/installed-tests/ibus
@@ -147,6 +163,14 @@ $(test_metas): $(test_metas_in)
 ibus-compose-locales: ibus-compose-locales.in
 	SRCDIR=$(test_sourcesdir); \
 	sed -e "s|@SRCDIR[@]|$$SRCDIR|g" $< > $@.tmp; \
+	chmod a+x $@.tmp; \
+	mv $@.tmp $@; \
+	$(NULL)
+
+%.sh: %.sh.in
+	SRCDIR=$(test_sourcesdir); \
+	sed -e "s|@SRCDIR[@]|$$SRCDIR|g" $< > $@.tmp; \
+	chmod a+x $@.tmp; \
 	mv $@.tmp $@; \
 	$(NULL)
 
@@ -156,6 +180,7 @@ ibus-desktop-testing-autostart: ibus-desktop-testing-autostart.in
 	    -e "s|@INSTALLEDDIR[@]|$$INSTALLEDDIR|g" \
 	    -e "s|@LIBEXECDIR[@]|$(libexecdir)|g" \
 	    $< > $@.tmp; \
+	chmod a+x $@.tmp; \
 	mv $@.tmp $@; \
 	$(NULL)
 
@@ -165,6 +190,7 @@ ibus-desktop-testing-runner: ibus-desktop-testing-runner.in
 	    -e "s|@INSTALLEDDIR[@]|$$INSTALLEDDIR|g" \
 	    -e "s|@LIBEXECDIR[@]|$(libexecdir)|g" \
 	    $< > $@.tmp; \
+	chmod a+x $@.tmp; \
 	mv $@.tmp $@; \
 	$(NULL)
 
@@ -180,6 +206,7 @@ EXTRA_DIST = \
     ibus-desktop-testing-autostart.in \
     ibus-desktop-testing-module \
     ibus-desktop-testing-runner.in \
+    libinput-test.sh.in \
     $(NULL)
 
 ibus_bus_SOURCES = ibus-bus.c
@@ -218,15 +245,20 @@ ibus_keynames_SOURCES = ibus-keynames.c
 ibus_keynames_LDADD = $(prog_ldadd)
 
 ibus_keypress_SOURCES = ibus-keypress.c
+ibus_keypress_LDADD = $(prog_ldadd)
+testwindow_SOURCES = testwindow.c
+ibus_keypress_fixme_SOURCES = ibus-keypress-fixme.c
 if ENABLE_GTK4
-ibus_keypress_CFLAGS = @GTK4_CFLAGS@ @XTEST_CFLAGS@
-ibus_keypress_LDADD = $(prog_ldadd) @GTK4_LIBS@ @XTEST_LIBS@
+testwindow_CFLAGS = @GTK4_CFLAGS@
+testwindow_LDADD = $(prog_ldadd) @GTK4_LIBS@
 else
 if ENABLE_GTK3
-ibus_keypress_CFLAGS = @GTK3_CFLAGS@ @XTEST_CFLAGS@
-ibus_keypress_LDADD = $(prog_ldadd) @GTK3_LIBS@ @XTEST_LIBS@
+testwindow_CFLAGS = @GTK3_CFLAGS@
+testwindow_LDADD = $(prog_ldadd) @GTK3_LIBS@
 endif
 endif
+ibus_keypress_fixme_CFLAGS = $(testwindow_CFLAGS)
+ibus_keypress_fixme_LDADD = $(testwindow_LDADD)
 
 ibus_keyval_SOURCES = ibus-keyval.c
 ibus_keyval_CFLAGS = @GTK4_CFLAGS@
