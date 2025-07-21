@@ -154,6 +154,16 @@ AC_CHECK_FUNCS(daemon)
 AC_CHECK_LIB(c, dlclose, LIBDL="", [AC_CHECK_LIB(dl, dlclose, LIBDL="-ldl")])
 AC_SUBST(LIBDL)
 
+# Check if static build only
+AC_MSG_CHECKING([for IBUS_STATIC_COMPILATION])
+ibus_build_static_only=0
+if test "x$enable_static" = "xyes" -a "x$enable_shared" != "xyes" ; then
+    ibus_build_static_only=1
+    AC_DEFINE(IBUS_STATIC_COMPILATION, $ibus_build_static_only,
+              [Define to build static])
+fi
+AC_MSG_RESULT([$ibus_build_static_only])
+
 # Check if cross compiling.
 AM_CONDITIONAL(CROSS_COMPILING, test "x$cross_compiling" = xyes)
 

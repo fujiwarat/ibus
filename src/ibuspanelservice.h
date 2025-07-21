@@ -78,6 +78,29 @@ typedef enum
   IBUS_PANEL_SERVICE_MSG_CODE_LOADING_UNICODE
 } IBusPanelServiceMsgCode;
 
+/**
+ * IBusPanelServicePreeditFormat:
+ * @IBUS_PANEL_SERVICE_PREEDIT_FORMAT_RGBA: Use #IBusAttribute with the RGBA.
+ *         This has been a default usage and ibus_attribute_get_attr_type()
+ *         returns @IBUS_ATTR_TYPE_UNDERLINE, @IBUS_ATTR_TYPE_FOREGROUND,
+ *         @IBUS_ATTR_TYPE_BACKGROUND.
+ * @IBUS_PANEL_SERVICE_PREEDIT_FORMAT_HINT: Use #IBusAttribute with the hints.
+ *         This let #IBusPanelService decides the actual RGBA values to follow
+ *         the current desktop theme and ibus_attribute_get_attr_type()
+ *         returns @IBUS_ATTR_TYPE_HINT.
+ *
+ * You can set the "preedit-format" property of the constructor of
+ * #IBusPanelService.
+ *
+ * Since: 1.5.33
+ * Stability: Unstable
+ */
+typedef enum
+{
+  IBUS_PANEL_SERVICE_PREEDIT_FORMAT_RGBA,
+  IBUS_PANEL_SERVICE_PREEDIT_FORMAT_HINT
+} IBusPanelServicePreeditFormat;
+
 
 typedef struct _IBusPanelService IBusPanelService;
 typedef struct _IBusPanelServiceClass IBusPanelServiceClass;

@@ -20,14 +20,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
  * USA
  */
+#include "ibusattrlistprivate.h"
 #include "ibusshare.h"
 #include "ibuspanelservice.h"
 #include "ibusmarshalers.h"
 #include "ibusinternal.h"
 
 #define IBUS_PANEL_SERVICE_GET_PRIVATE(o)  \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), IBUS_TYPE_PANEL_SERVICE, \
-                                 IBusPanelServicePrivate))
+   ((IBusPanelServicePrivate *)ibus_panel_service_get_instance_private (o))
 
 enum {
     UPDATE_PREEDIT_TEXT,
@@ -66,7 +66,12 @@ enum {
 
 enum {
     PROP_0,
+    PROP_PREEDIT_FORMAT,
 };
+
+typedef struct _IBusPanelServicePrivate {
+    guint8 preedit_format;
+} IBusPanelServicePrivate;
 
 static guint            panel_signals[LAST_SIGNAL] = { 0 };
 
@@ -159,7 +164,9 @@ static void      ibus_panel_service_panel_extension_received
                                    (IBusPanelService       *panel,
                                     IBusExtensionEvent     *event);
 
-G_DEFINE_TYPE (IBusPanelService, ibus_panel_service, IBUS_TYPE_SERVICE)
+G_DEFINE_TYPE_WITH_PRIVATE (IBusPanelService,
+                            ibus_panel_service,
+                            IBUS_TYPE_SERVICE)
 
 static const gchar introspection_xml[] =
     "<node>"
@@ -363,6 +370,25 @@ ibus_panel_service_class_init (IBusPanelServiceClass *class)
     class->show_preedit_text        = ibus_panel_service_not_implemented;
     class->start_setup              = ibus_panel_service_not_implemented;
     class->state_changed            = ibus_panel_service_not_implemented;
+
+    /* install properties */
+    /**
+     * IBusPanelService:preedit-format:
+     *
+     * The preedit format of this #IBusPanelService.
+     */
+    g_object_class_install_property (gobject_class,
+                    PROP_PREEDIT_FORMAT,
+                    g_param_spec_uchar (
+                        "preedit-format",
+                        "preedit format",
+                        "The preedit format",
+                        0,
+                        100,
+                        IBUS_PANEL_SERVICE_PREEDIT_FORMAT_RGBA,
+                        G_PARAM_READWRITE |
+                        G_PARAM_CONSTRUCT_ONLY));
+
 
     /* install signals */
     /**
@@ -1049,7 +1075,9 @@ ibus_panel_service_class_init (IBusPanelServiceClass *class)
     /**
      * IBusPanelService::candidate-clicked-lookup-table:
      * @panel: An #IBusPanelService
-     * @text: An #IBusText
+     * @index: Index in the Lookup table
+     * @button: GdkEventButton::button (1: left button, etc.)
+     * @state: GdkEventButton::state (key modifier flags)
      *
      * Emitted when the client application get the
      * ::candidate-clicked-lookup-table.
@@ -1111,7 +1139,14 @@ ibus_panel_service_set_property (IBusPanelService *panel,
                                  const GValue     *value,
                                  GParamSpec       *pspec)
 {
+    IBusPanelServicePrivate *priv;                 
+
+    g_return_if_fail (IBUS_IS_PANEL_SERVICE (panel));
+    priv = IBUS_PANEL_SERVICE_GET_PRIVATE(panel);
     switch (prop_id) {
+    case PROP_PREEDIT_FORMAT:
+        priv->preedit_format = g_value_get_uint (value);
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID (panel, prop_id, pspec);
     }
@@ -1123,7 +1158,14 @@ ibus_panel_service_get_property (IBusPanelService *panel,
                                  GValue           *value,
                                  GParamSpec       *pspec)
 {
+    IBusPanelServicePrivate *priv;                 
+
+    g_return_if_fail (IBUS_IS_PANEL_SERVICE (panel));
+    priv = IBUS_PANEL_SERVICE_GET_PRIVATE(panel);
     switch (prop_id) {
+    case PROP_PREEDIT_FORMAT:
+        g_value_set_uint (value, priv->preedit_format);
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID (panel, prop_id, pspec);
     }
@@ -1143,6 +1185,7 @@ _g_object_unref_if_floating (gpointer instance)
         g_object_unref (instance);
 }
 
+
 static gboolean
 ibus_panel_service_service_authorized_method (IBusService     *service,
                                               GDBusConnection *connection)
@@ -1151,6 +1194,50 @@ ibus_panel_service_service_authorized_method (IBusService     *service,
         return TRUE;
     return FALSE;
 }
+
+
+static void
+ibus_panel_convert_text (IBusPanelService *panel,
+                         IBusText         *text)
+{
+    IBusPanelServicePrivate *priv;
+    IBusAttrList *new_attrs;
+    GError *error = NULL;
+
+    g_return_if_fail (IBUS_IS_TEXT (text));
+    g_return_if_fail (IBUS_IS_PANEL_SERVICE (panel));
+
+    priv = IBUS_PANEL_SERVICE_GET_PRIVATE(panel);
+    switch (priv->preedit_format) {
+    case IBUS_PANEL_SERVICE_PREEDIT_FORMAT_RGBA:
+        new_attrs = ibus_attr_list_copy_format_to_rgba (text->attrs, &error);
+        if (error) {
+            g_warning ("text:%s has problem to convert to RGBA format: %s",
+                       text->text, error->message);
+            g_error_free (error);
+        }
+        if (new_attrs) {
+            g_object_unref (text->attrs);
+            text->attrs = new_attrs;
+        }
+        break;
+    case IBUS_PANEL_SERVICE_PREEDIT_FORMAT_HINT:
+        new_attrs = ibus_attr_list_copy_format_to_hint (text->attrs, &error);
+        if (error) {
+            g_warning ("text:%s has problem to convert to HINT format: %s",
+                       text->text, error->message);
+            g_error_free (error);
+        }
+        if (new_attrs) {
+            g_object_unref (text->attrs);
+            text->attrs = new_attrs;
+        }
+        break;
+    default:
+        g_assert_not_reached ();
+    }
+}
+
 
 static void
 ibus_panel_service_service_method_call (IBusService           *service,
@@ -1184,10 +1271,12 @@ ibus_panel_service_service_method_call (IBusService           *service,
         GVariant *variant = NULL;
         guint cursor = 0;
         gboolean visible = FALSE;
+        IBusText *text;
 
         g_variant_get (parameters, "(vub)", &variant, &cursor, &visible);
-        IBusText *text = IBUS_TEXT (ibus_serializable_deserialize (variant));
+        text = IBUS_TEXT (ibus_serializable_deserialize (variant));
         g_variant_unref (variant);
+        ibus_panel_convert_text (panel, text);
 
         g_signal_emit (panel, panel_signals[UPDATE_PREEDIT_TEXT], 0, text, cursor, visible);
         _g_object_unref_if_floating (text);
@@ -1198,9 +1287,10 @@ ibus_panel_service_service_method_call (IBusService           *service,
     if (g_strcmp0 (method_name, "UpdateAuxiliaryText") == 0) {
         GVariant *variant = NULL;
         gboolean visible = FALSE;
+        IBusText *text;
 
         g_variant_get (parameters, "(vb)", &variant, &visible);
-        IBusText *text = IBUS_TEXT (ibus_serializable_deserialize (variant));
+        text = IBUS_TEXT (ibus_serializable_deserialize (variant));
         g_variant_unref (variant);
 
         g_signal_emit (panel, panel_signals[UPDATE_AUXILIARY_TEXT], 0, text, visible);
@@ -1212,9 +1302,10 @@ ibus_panel_service_service_method_call (IBusService           *service,
     if (g_strcmp0 (method_name, "UpdateLookupTable") == 0) {
         GVariant *variant = NULL;
         gboolean visible = FALSE;
+        IBusLookupTable *table;
 
         g_variant_get (parameters, "(vb)", &variant, &visible);
-        IBusLookupTable *table = IBUS_LOOKUP_TABLE (ibus_serializable_deserialize (variant));
+        table = IBUS_LOOKUP_TABLE (ibus_serializable_deserialize (variant));
         g_variant_unref (variant);
 
         g_signal_emit (panel, panel_signals[UPDATE_LOOKUP_TABLE], 0, table, visible);

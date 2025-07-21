@@ -1,4 +1,10 @@
 namespace IBus {
+        public class AttrList : IBus.Serializable {
+                [Version (since = "1.5.33")] 
+                public IBus.AttrList copy_format_to_hint () throws GLib.Error;
+                [Version (since = "1.5.33")] 
+                public IBus.AttrList copy_format_to_rgba () throws GLib.Error;
+        }
         public class EmojiData : IBus.Serializable {
 		[CCode (cname = "ibus_emoji_data_new",
                         has_construct_function = true)]
