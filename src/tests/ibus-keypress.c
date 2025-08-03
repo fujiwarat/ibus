@@ -98,17 +98,6 @@ is_integrated_desktop ()
 }
 
 
-gboolean
-_wait_for_key_release_cb (gpointer user_data)
-{
-    GMainLoop *loop = (GMainLoop *)user_data;
-    /* See ibus-compose:_wait_for_key_release_cb() */
-    g_test_message ("Waited 3 seconds for key release event");
-    g_main_loop_quit (loop);
-    return G_SOURCE_REMOVE;
-}
-
-
 static gboolean
 ibus_test_engine_io_watch (GIOChannel   *channel,
                            GIOCondition  condition,
@@ -686,23 +675,6 @@ tp_create_window ()
 
 
 static void
-test_init (void)
-{
-    char *tty_name = ttyname (STDIN_FILENO);
-    GMainLoop *loop;
-    guint idle_id = 0;
-
-    loop = g_main_loop_new (NULL, TRUE);
-    g_test_message ("Test on %s", tty_name ? tty_name : "(null)");
-    if (tty_name && g_strstr_len (tty_name, -1, "pts")) {
-        idle_id = g_timeout_add_seconds (3, _wait_for_key_release_cb, loop);
-        g_main_loop_run (loop);
-    }
-    g_main_loop_unref (loop);
-}
-
-
-static void
 test_keypress (gconstpointer user_data)
 {
 #if !GTK_CHECK_VERSION (4, 0, 0)
@@ -766,6 +738,7 @@ test_keypress (gconstpointer user_data)
 int
 main (int argc, char *argv[])
 {
+    char *tty_name = ttyname (STDIN_FILENO);
     static GTestDataMain data;
     setlocale (LC_ALL, "");
 
@@ -779,7 +752,12 @@ main (int argc, char *argv[])
         g_message ("Failed setenv NO_AT_BRIDGE\n");
     g_test_init (&argc, &argv, NULL);
     ibus_init ();
-    g_test_add_func ("/ibus-keypress/test-init", test_init);
+
+    if (tty_name && g_strstr_len (tty_name, -1, "pts")) {
+        g_test_message ("Sleeping for a second to paper over enter key release");
+        sleep(1);
+    }
+
     data.argc = argc;
     data.argv = argv;
     g_test_add_data_func ("/ibus-keypress/keypress", &data, test_keypress);
