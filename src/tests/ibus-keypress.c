@@ -425,10 +425,11 @@ tp_destroy_window (gpointer user_data)
 }
 
 
-static gboolean
+static struct uinput_replay_device *
 tp_create_keypress (void)
 {
     GError *error = NULL;
+    struct uinput_replay_device *device;
 
 #ifdef UINPUT_REPLAY_DEVICE_EMBED_DATA
     /* FIXME: Need a script to convert libinput-test.yml to GResource. */
@@ -448,20 +449,19 @@ tp_create_keypress (void)
 
     if (!(recording = g_build_filename (datadir, "libinput-test.yml", NULL))) {
         g_test_fail_printf ("Failed to allocate YAML file");
-        return FALSE;
+        return NULL;
     }
     g_free (datadir);
-    m_replay = uinput_replay_create_device (recording, &error);
+    device = uinput_replay_create_device (recording, &error);
     g_free (recording);
 #endif
 
-    if (!m_replay) {
+    if (!device) {
         g_test_fail_printf ("Failed to create uinput device: %s",
                             error->message);
         g_error_free (error);
-        return FALSE;
     }
-    return TRUE;
+    return device;
 }
 
 static int
@@ -732,7 +732,7 @@ test_keypress (gconstpointer user_data)
 
     m_bus = ibus_bus_new ();
 
-    if (!tp_create_keypress ())
+    if (!(m_replay = tp_create_keypress ()))
         return;
 
     if (!m_replay) {
