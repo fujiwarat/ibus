@@ -276,7 +276,7 @@ ibus_test_engine_create_engine_cb (IBusFactory *factory,
     gchar *engine_path;
     TestIdleData *data = (TestIdleData *)user_data;
 
-    g_test_message ("Factroy:create-engine()");
+    g_test_message ("Factory:create-engine()");
     g_assert (data);
     if (!data->idle_id)
         return NULL;
@@ -782,7 +782,7 @@ main (int argc, char *argv[])
     g_test_add_func ("/ibus-keypress/test-init", test_init);
     data.argc = argc;
     data.argv = argv;
-    g_test_add_data_func ("/ibus-keypress/keyrepss", &data, test_keypress);
+    g_test_add_data_func ("/ibus-keypress/keypress", &data, test_keypress);
 
     return g_test_run ();
 }
