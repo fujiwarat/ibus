@@ -230,6 +230,8 @@ public class CandidatePanel : Gtk.Box{
             if (str.length > 0) {
                 m_preedit_label.set_text(str);
                 m_preedit_label.show();
+                var attrs = text.get_attributes().copy_format_to_rgba();
+                text.set_attributes(attrs);
                 set_attributes(m_preedit_label, text);
             } else {
                 m_preedit_label.set_text("");

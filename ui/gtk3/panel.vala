@@ -1060,11 +1060,12 @@ class Panel : IBus.PanelService {
         try {
             notification.show();
         } catch (GLib.Error e) {
-            warning (message);
+            warning(message);
         }
 #else
-        warning (message);
+        warning(message);
 #endif
+        set_preedit_format(IBus.PreeditFormat.HINT);
     }
 
 

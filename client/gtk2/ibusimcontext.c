@@ -30,6 +30,7 @@
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
 #include <ibus.h>
+#include <ibusattrlistprivate.h>
 #include "ibusimcontext.h"
 
 #ifdef GDK_WINDOWING_WAYLAND
@@ -2190,7 +2191,20 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
     ibusimcontext->preedit_string = g_strdup (str);
     if (text->attrs) {
         guint i;
+        IBusAttrList *new_attrs;
+        GError *error = NULL;
         ibusimcontext->preedit_attrs = pango_attr_list_new ();
+        new_attrs = ibus_attr_list_copy_format_to_rgba (text->attrs, &error);
+        if (error) {
+            g_warning ("text:%s has problem to convert to RGBA format: %s",
+                       text->text, error->message);
+            g_error_free (error);
+            return;
+        }
+        if (new_attrs) {
+            g_object_unref (text->attrs);
+            text->attrs = new_attrs;
+        }
         for (i = 0; ; i++) {
             IBusAttribute *attr = ibus_attr_list_get (text->attrs, i);
             if (attr == NULL) {
@@ -2213,6 +2227,9 @@ _ibus_context_update_preedit_text_cb (IBusInputContext  *ibuscontext,
                                         ((attr->value & 0xff0000) >> 8) | 0xff,
                                         ((attr->value & 0x00ff00)) | 0xff,
                                         ((attr->value & 0x0000ff) << 8) | 0xff);
+                break;
+            case IBUS_ATTR_TYPE_HINT:
+                g_assert_not_reached ();
                 break;
             default:
                 continue;
@@ -2345,12 +2362,13 @@ _create_input_context_done (IBusBus       *bus,
     if (context == NULL) {
         g_warning ("Create input context failed: %s.", error->message);
         g_error_free (error);
-    }
-    else {
+    } else {
         gboolean requested_surrounding_text = FALSE;
         ibus_input_context_set_client_commit_preedit (context, TRUE);
         if (_use_sync_mode == 1)
             ibus_input_context_set_post_process_key_event (context, TRUE);
+        ibus_input_context_set_preedit_format (context,
+                                               IBUS_PREEDIT_FORMAT_HINT);
         ibusimcontext->ibuscontext = context;
 
         g_signal_connect (ibusimcontext->ibuscontext,
