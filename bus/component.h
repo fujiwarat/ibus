@@ -101,6 +101,15 @@ void             bus_component_set_restart       (BusComponent    *component,
                                                   gboolean         restart);
 BusComponent    *bus_component_from_engine_desc  (IBusEngineDesc  *engine);
 
+/**
+ * bus_component_check:
+ * Currently checks if g_spawn_async() works with an echo command
+ * and this should be called before the first bus_component_start()
+ *
+ * @returns: error code with g_spawn_async()
+ */
+int              bus_component_check             (void);
+
 G_END_DECLS
 #endif
 
