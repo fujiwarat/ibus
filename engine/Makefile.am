@@ -122,4 +122,8 @@ simple.xml.in:
 $(libibus):
 	$(MAKE) -C $(top_builddir)/src
 
+check-am: all-am simple.xml
+	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
+	xmllint --noout --valid --postvalid simple.xml
+
 -include $(top_srcdir)/git.mk
