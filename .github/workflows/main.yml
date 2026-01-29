@@ -196,15 +196,10 @@ jobs:
         # configure options from
         # https://salsa.debian.org/debian/ibus/-/blob/master/debian/rules
         run: >
-          if ls -a .github;
-          then
-          pwd; ls -a .github/workflows;
-          fi;
           if ! ls /usr/share/vala-*/vapi/wayland-client.vapi;
           then
-          wget --save-cookies=cookies.txt --keep-session-cookies
-          https://gitlab.gnome.org/GNOME/vala/-/raw/0.56/vapi/wayland-client.vapi;
-          mv wayland-client.vapi bindings/vala/.;
+          cp .github/workflows/wayland-client.v0.56.vapi
+          bindings/vala/.wayland-client.vapi;
           fi;
           export SAVE_DIST_FILES=1;
           ./autogen.sh
