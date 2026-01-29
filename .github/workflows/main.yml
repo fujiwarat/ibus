@@ -198,7 +198,8 @@ jobs:
         run: >
           if ! ls /usr/share/vala-*/vapi/wayland-client.vapi;
           then
-          wget https://gitlab.gnome.org/GNOME/vala/-/raw/0.56/vapi/wayland-client.vapi;
+          wget --save-cookies=cookies.txt --keep-session-cookies
+          https://gitlab.gnome.org/GNOME/vala/-/raw/0.56/vapi/wayland-client.vapi;
           mv wayland-client.vapi bindings/vala/.;
           fi;
           export SAVE_DIST_FILES=1;
