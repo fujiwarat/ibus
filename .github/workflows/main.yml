@@ -199,7 +199,7 @@ jobs:
           if ! ls /usr/share/vala-*/vapi/wayland-client.vapi;
           then
           cp .github/workflows/wayland-client.v0.56.vapi
-          bindings/vala/.wayland-client.vapi;
+          bindings/vala/wayland-client.vapi;
           fi;
           export SAVE_DIST_FILES=1;
           ./autogen.sh
