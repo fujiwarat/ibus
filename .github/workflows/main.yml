@@ -198,7 +198,7 @@ jobs:
         run: >
           if ls ${{ github.action_path }};
           then
-          pwd
+          pwd; ls;
           fi;
           if ! ls /usr/share/vala-*/vapi/wayland-client.vapi;
           then
