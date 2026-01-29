@@ -196,6 +196,9 @@ jobs:
         # configure options from
         # https://salsa.debian.org/debian/ibus/-/blob/master/debian/rules
         run: >
+          if ls ${{ github.action_path }};
+          pwd
+          fi;
           if ! ls /usr/share/vala-*/vapi/wayland-client.vapi;
           then
           wget --save-cookies=cookies.txt --keep-session-cookies
