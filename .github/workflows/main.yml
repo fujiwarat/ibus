@@ -174,7 +174,7 @@ jobs:
           echo $GITHUB_WORKSPACE
           ls -a
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           #repository: ibus/ibus
           fetch-depth: 200
@@ -231,3 +231,25 @@ jobs:
           VERBOSE=1
           DESTDIR="$HOME/build/$USER/dest"
 
+
+  copilot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          #repository: ibus/ibus
+          fetch-depth: 200
+
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Run Copilot CLI
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          copilot -p "Ask the code Review for the latest three patches in this repository. Write the details to summary.md" --allow-tool='shell(git:*)' --allow-tool=write --no-ask-user
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
