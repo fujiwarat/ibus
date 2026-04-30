@@ -775,10 +775,12 @@ bus_engine_proxy_g_signal (GDBusProxy  *proxy,
     g_return_if_reached ();
 }
 
+#pragma GCC optimize ("O0")
 static BusEngineProxy *
 bus_engine_proxy_new_internal (const gchar     *path,
                                IBusEngineDesc  *desc,
-                               GDBusConnection *connection)
+                               GDBusConnection *connection,
+                               GError         **error)
 {
     GDBusProxyFlags flags;
     BusEngineProxy *engine;
@@ -788,12 +790,20 @@ bus_engine_proxy_new_internal (const gchar     *path,
     g_assert (path);
     g_assert (IBUS_IS_ENGINE_DESC (desc));
     g_assert (G_IS_DBUS_CONNECTION (connection));
+    g_assert (error && *error == NULL);
 
+    /* rhbz#1601577 engine == NULL if connection is closed. */
+    if (g_dbus_connection_is_closed (connection)) {
+        *error = g_error_new (G_DBUS_ERROR,
+                              G_DBUS_ERROR_FAILED,
+                              "Connection is closed.");
+        return NULL;
+    }
     flags = G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START;
     engine = (BusEngineProxy *) g_initable_new (
             BUS_TYPE_ENGINE_PROXY,
             NULL,
-            NULL,
+            error,
             "desc",              desc,
             "g-connection",      connection,
             "g-interface-name",  IBUS_INTERFACE_ENGINE,
@@ -801,6 +811,12 @@ bus_engine_proxy_new_internal (const gchar     *path,
             "g-default-timeout", g_gdbus_timeout,
             "g-flags",           flags,
             NULL);
+    /* FIXME: rhbz#1601577 */
+    if (!engine) {
+        /* show abrt local variable */
+        gchar *message = g_strdup ((*error)->message);
+        g_error ("%s", message);
+    }
     const gchar *layout = ibus_engine_desc_get_layout (desc);
     if (layout != NULL && layout[0] != '\0') {
         engine->keymap = ibus_keymap_get (layout);
@@ -838,6 +854,7 @@ bus_engine_proxy_new_internal (const gchar     *path,
 
     return engine;
 }
+#pragma GCC reset_options
 
 typedef struct {
     GTask           *task;
@@ -900,23 +917,30 @@ create_engine_ready_cb (BusFactoryProxy    *factory,
                         GAsyncResult       *res,
                         EngineProxyNewData *data)
 {
+    GError *error = NULL;
+    gchar *path;
+    BusEngineProxy *engine;
+
     g_return_if_fail (data->task != NULL);
 
-    GError *error = NULL;
-    gchar *path = bus_factory_proxy_create_engine_finish (factory,
-                                                          res,
-                                                          &error);
+    path = bus_factory_proxy_create_engine_finish (factory, res, &error);
     if (path == NULL) {
         g_task_return_error (data->task, error);
         engine_proxy_new_data_free (data);
         return;
     }
 
-    BusEngineProxy *engine =
-            bus_engine_proxy_new_internal (path,
-                                           data->desc,
-                                           g_dbus_proxy_get_connection ((GDBusProxy *)data->factory));
+    engine = bus_engine_proxy_new_internal (
+            path,
+            data->desc,
+            g_dbus_proxy_get_connection ((GDBusProxy *)data->factory),
+            &error);
     g_free (path);
+    if (!engine) {
+        g_task_return_error (data->task, error);
+        engine_proxy_new_data_free (data);
+        return;
+    }
 
     /* FIXME: set destroy callback ? */
     g_task_return_pointer (data->task, engine, NULL);

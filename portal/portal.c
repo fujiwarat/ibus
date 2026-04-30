@@ -92,6 +92,11 @@ static void portal_context_g_signal (GDBusProxy        *proxy,
                                      GVariant          *parameters,
                                      IBusPortalContext *portal_context);
 
+#define IBUS_TYPE_PORTAL_CONTEXT                \
+    (ibus_portal_context_get_type ())
+#define IBUS_IS_PORTAL_CONTEXT(obj)             \
+    (G_TYPE_CHECK_INSTANCE_TYPE ((obj), IBUS_TYPE_PORTAL_CONTEXT))
+
 G_DEFINE_TYPE_WITH_CODE (IBusPortalContext,
                          ibus_portal_context,
                          IBUS_DBUS_TYPE_INPUT_CONTEXT_SKELETON,
@@ -492,11 +497,6 @@ ibus_portal_context_new (IBusInputContext *context,
             g_strdup_printf (IBUS_PATH_INPUT_CONTEXT, portal_context->id);
     portal_context->service = ibus_dbus_service_skeleton_new ();
 
-    g_signal_connect (portal_context->service,
-                      "handle-destroy",
-                      G_CALLBACK (ibus_portal_context_handle_destroy),
-                      portal_context);
-
     if (!g_dbus_interface_skeleton_export (
                 G_DBUS_INTERFACE_SKELETON (portal_context->service),
                 connection, portal_context->object_path,
@@ -509,7 +509,16 @@ ibus_portal_context_new (IBusInputContext *context,
         return NULL;
     }
 
+    /* rhbz#2239633 g_list_prepend() needs to be callsed before
+     * ibus_portal_context_handle_destroy() is connected
+     * for g_list_remove() in ibus_portal_context_finalize().
+     */
     all_contexts = g_list_prepend (all_contexts, portal_context);
+
+    g_signal_connect (portal_context->service,
+                      "handle-destroy",
+                      G_CALLBACK (ibus_portal_context_handle_destroy),
+                      portal_context);
 
     return portal_context;
 }
@@ -667,6 +676,12 @@ name_owner_changed (GDBusConnection *connection,
             IBusPortalContext *portal_context = l->data;
             next = l->next;
 
+            /* rhbz#2151344 portal_context might not be finalized?  */
+            if (!G_LIKELY (IBUS_IS_PORTAL_CONTEXT (portal_context))) {
+                g_warn_message (G_LOG_DOMAIN, __FILE__, __LINE__, G_STRFUNC,
+                                "portal_context is not IBusPortalContext");
+                continue;
+            }
             if (g_strcmp0 (portal_context->owner, name) == 0) {
                 g_object_unref (portal_context);
             }
