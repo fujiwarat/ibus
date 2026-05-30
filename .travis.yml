@@ -1,3 +1,6 @@
+# The Travis CI is no longer used.
+# Currently the project CI is enabled with .github/workflows/main.yml
+# instead of this file.
 language: c
 compiler: gcc
 os: linux

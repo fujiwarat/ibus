@@ -1,2 +1,4 @@
-# This file is used by "git cl" to get code review information.
+# github.com provides code views in the pull requests instead of this file.
+# This file is no longer used but was used by "git cl" to get code review
+# information previously.
 CODE_REVIEW_SERVER: codereview.appspot.com

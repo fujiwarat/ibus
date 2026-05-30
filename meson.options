@@ -163,6 +163,16 @@ option('vapi',
   value: 'auto',
   description: 'Build VAPI files',
 )
+# When IBus is built with the Json files in test directory, the build
+# tries to install IBus.py file into pyoverridesdir.
+# The default GI directory is /usr in Flatpak but the directory is readonly
+# with `flatpak-builder` and the Flatpak specific GI files are installed in
+# /app GI directory.
+option('python-overrides-dir',
+  type: 'string',
+  value: '',
+  description: 'Python overrides directory',
+)
 # Docs
 option('gtk-doc',
   type: 'boolean',

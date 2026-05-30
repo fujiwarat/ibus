@@ -1,6 +1,11 @@
 project('ibus',
   [ 'c', 'vala' ],
-  version: '1.5.25',
+  version: '1.5.35@0@'.format(run_command(
+      'sh', '-c',
+      '. @0@; test $IBUS_RELEASED -eq 1 && echo -n "" || echo -n "@1@"'.format(
+          meson.current_source_dir() / 'meson.config',
+          '-alpha1'),
+      check: true).stdout().strip()),
   meson_version: '>= 1.5',
   license: 'LGPL-2.1-or-later'
 )
@@ -20,7 +25,7 @@ sed = find_program('sed')
 _version_split = meson.project_version().split('.')
 ibus_major_version = _version_split[0].to_int()
 ibus_minor_version = _version_split[1].to_int()
-ibus_micro_version = _version_split[2].to_int()
+ibus_micro_version = _version_split[2].split('-')[0].to_int()
 
 ibus_api_version = ibus_major_version.to_string() + '.0'
 
@@ -228,9 +233,12 @@ pygobject_dep = dependency('pygobject-3.0', version: '>= 3.0.0',
                            required: false)
 enable_pygobject = pygobject_dep.found()
 if enable_pygobject
-  pyoverridesdir = run_command(python.full_path(), '-c',
-                               'import gi; print(gi._overridesdir)',
-                               check: true).stdout().strip()
+  pyoverridesdir = get_option('python-overrides-dir')
+  if pyoverridesdir == ''
+    pyoverridesdir = run_command(python.full_path(), '-c',
+                                 'import gi; print(gi._overridesdir)',
+                                 check: true).stdout().strip()
+  endif
 endif
 
 # DConf

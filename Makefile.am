@@ -75,6 +75,7 @@ EXTRA_DIST = \
 	autogen.sh \
 	$(ibus_pc_in) \
 	ibus.spec.in \
+	meson.config \
 	python-config.py \
 	xinput-ibus \
 	$(NULL)
