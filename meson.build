@@ -90,6 +90,35 @@ dbus_dep = dependency('dbus-1')
 posix_dep = valac.find_library('posix')
 json_glib_dep = dependency('json-glib-1.0', required: false)
 
+# Check to reconfigure build flags.
+# Could be failed due to no RPM_ARCH variable as meson-log.txt explaned.
+result = cc.run('''
+int main (int argc, char *argv[]) {
+  return 0;
+}''', name: 'test CFLAGS and LDFLAGS')
+
+assert(result.returncode() == 0,
+      'Failed to compile a code with returncode @0@: @1@'.format(
+        result.returncode(),
+        result.stderr()
+))
+
+# I18N
+enable_nls = false
+enable_gnu_gettext = false
+if cc.has_header('libintl.h')
+  if cc.has_header_symbol('libintl.h', 'gettext')
+    enable_gnu_gettext = true
+  elif cc.find_library('intl', required: false).found()
+    enable_gnu_gettext = true
+  endif
+  enable_nls = true
+endif
+if not enable_gnu_gettext and cc.has_define('__USE_GNU_GETTEXT')
+  enable_nls = true
+  enable_gnu_gettext = true
+endif
+
 # GTK
 gtk2_dep = dependency('gtk+-2.0', required: get_option('gtk2'))
 enable_gtk2 = gtk2_dep.found()
@@ -294,12 +323,16 @@ conf.set_quoted('NO_SNOOPER_APPS', ','.join(get_option('no-snooper-apps')))
 conf.set_quoted('IBUS_SOCKET_DIR', ibus_socket_dir)
 conf.set_quoted('UI_WAYLAND_DESKTOP',
                 'org.freedesktop.IBus.Panel.Wayland.Gtk3.desktop')
+conf.set('ENABLE_NLS', enable_nls)
 conf.set('HAVE_DAEMON', cc.has_function('daemon'))
+conf.set('HAVE_GETGRGID_R', cc.has_header_symbol('grp.h', 'getgrgid_r'))
+conf.set('HAVE_GETTEXT', enable_gnu_gettext)
 conf.set('HAVE_LOCALE_H', cc.has_header_symbol('locale.h', 'LC_ALL'))
 conf.set('HAVE_SYS_PRCTL_H', cc.has_header_symbol('sys/prctl.h', 'prctl'))
 conf.set('HAVE_JSON_GLIB1', json_glib_dep.found())
-conf.set('HAVE_XFIXES', have_xfixes)
 conf.set('HAVE_X11_XKBLIB_H', have_xkblib)
+conf.set('HAVE_XFIXES', have_xfixes)
+conf.set('HAVE_XIM', enable_xim)
 conf.set('GLIB2_EMBED_ERRNO_H', glib_dep.found() and
          glib_dep.version().version_compare('>= 2.65.0'))
 conf.set('DCONF_0_13_4', dconf_dep.found() and
@@ -354,8 +387,11 @@ ibus_rpm_spec = configure_file(
   },
 )
 
+install_emptydir(get_option('datadir') / 'ibus' / 'engine')
+
 summary({
   'Install prefix':                get_option('prefix'),
+  'CFLAGS':                        get_option('c_args'),
   'Build endianness':              endian,
   'PYTHON':                        python.full_path(),
   'Build PyGObject':               enable_pygobject,

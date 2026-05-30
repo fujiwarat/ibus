@@ -53,6 +53,9 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #mesondefine HAVE_INTTYPES_H
 
+/* Define to 1 if you have the <locale.h> header file. */
+#mesondefine HAVE_LOCALE_H
+
 /* Define to 1 if you have the <minix/config.h> header file. */
 #mesondefine HAVE_MINIX_CONFIG_H
 

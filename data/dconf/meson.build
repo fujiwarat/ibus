@@ -3,6 +3,10 @@ install_data('org.freedesktop.ibus.gschema.xml',
   install_dir: get_option('datadir') / 'glib-2.0' / 'schemas',
 )
 
+install_data('ibus.convert',
+  install_dir: get_option('datadir') / 'GConf' / 'gsettings',
+)
+
 # Dconf
 install_data('profile/ibus',
   install_dir: get_option('sysconfdir') / 'dconf' / 'profile',

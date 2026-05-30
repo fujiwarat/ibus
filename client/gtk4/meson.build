@@ -1,4 +1,5 @@
 gtk4_im_sources = files(
+  'iconwidget.c',
   'ibusim.c',
   'ibusimcontext.c',
 )

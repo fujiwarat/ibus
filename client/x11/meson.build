@@ -23,3 +23,14 @@ ibus_x11_module = executable('ibus-x11',
   install: true,
   install_dir: get_option('libexecdir'),
 )
+
+configure_file(
+  input: '10-ibus-x11.in',
+  output: '@BASENAME@',
+  configuration: {
+    'libexecdir': get_option('prefix') / get_option('libexecdir'),
+  },
+  install: true,
+  install_dir: get_option('sysconfdir') / 'xdg' / 'Xwayland-session.d',
+  install_mode: 'rwxr-xr-x',
+)

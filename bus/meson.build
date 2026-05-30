@@ -33,6 +33,10 @@ ibus_daemon_cflags = [
   '-DBINDIR="@0@"'.format(get_option('prefix') / get_option('bindir')),
 ]
 
+if get_option('emoji-dict')
+  ibus_daemon_cflags += '-DEMOJI_DICT'
+endif
+
 ibus_daemon = executable('ibus-daemon',
   [ ibus_daemon_common_sources, ibus_daemon_sources, ibus_daemon_marshalers ],
   dependencies: ibus_daemon_deps,

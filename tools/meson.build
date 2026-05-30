@@ -26,6 +26,11 @@ if get_option('emoji-dict') and get_option('ui')
   ibus_bin_valaflags += [ '-D', 'EMOJI_DICT' ]
 endif
 
+if enable_wayland
+  ibus_bin_valaflags += [ '-D', 'IBUS_WAYLAND' ]
+  ibus_bin_deps += [ wayland_dep ]
+endif
+
 if enable_introspection
   libibusimmodule_sources = files([
     'ibusimmodule.c',
@@ -42,7 +47,7 @@ if enable_introspection
     glib_dep,
   ]
 
-  libibusimmodule = library('libibusimmodule',
+  libibusimmodule = static_library('libibusimmodule',
     libibusimmodule_sources,
     include_directories: [ config_h_inc, ],
     c_args: libibusimmodule_cflags,
@@ -77,7 +82,7 @@ if enable_introspection
     vapi_dirs: [ '.' ],
   )
 
-  ibus_bin_deps += [ ibusimmodule_vapi ]
+  ibus_bin_deps += [ ibusimmodule_vapi, libibusimmodule_dep ]
 endif
 
 ibus_bin = executable('ibus',

@@ -87,7 +87,7 @@ executable('ibus-wayland',
 )
 
 if enable_introspection
-  libibuswaylandim = library('ibuswaylandim',
+  libibuswaylandim = static_library('ibuswaylandim',
     ibus_wayland_common_sources,
     wayland_built_sources,
     include_directories: ibus_wayland_includes,
@@ -111,6 +111,7 @@ if enable_introspection
     ],
     header: ibus_wayland_common_headers,
     includes: [ 'GLib-2.0', 'GObject-2.0', 'Gio-2.0', ],
+    dependencies: ibus_wayland_deps,
     extra_args: ibus_cflags + introspection_args,
     export_packages: 'ibus-1.0',
   )

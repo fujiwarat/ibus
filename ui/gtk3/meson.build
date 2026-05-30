@@ -157,7 +157,7 @@ if get_option('emoji-dict')
     'pango.vala',
   )
 
-  ibus_extension_gtk3 = executable('ibus-extension-emojier',
+  ibus_extension_gtk3 = executable('ibus-extension-gtk3',
     ibus_extension_gtk3_sources,
     dependencies: ibus_ui_gtk3_deps,
     c_args: ibus_ui_gtk3_cflags,
