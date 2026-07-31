@@ -1021,6 +1021,9 @@ bus_dbus_impl_remove_match (BusDBusImpl           *dbus,
                         "Parse match rule [%s] failed", rule_text);
         return;
     }
+    /* ibus_bus_watch_ibus_signal() supports IBUS_SERVICE_IBUS sender. */
+    if (!g_strcmp0 (bus_match_rule_get_sender (rule), IBUS_SERVICE_IBUS))
+        bus_match_rule_set_sender (rule, IBUS_NAME_OWNER_NAME);
 
     g_dbus_method_invocation_return_value (invocation, NULL);
     GList *p;
