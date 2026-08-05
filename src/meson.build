@@ -186,8 +186,8 @@ libibus = library('ibus-@0@'.format(ibus_api_version),
 ibus_dep = declare_dependency(
   link_with: libibus,
   sources: [
-    ibus_enums,
-    ibus_marshalers,
+    ibus_enums[1],
+    ibus_marshalers[1],
   ],
   include_directories: include_directories('.'),
 )
