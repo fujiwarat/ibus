@@ -260,15 +260,17 @@ ibus_keypress_SOURCES = \
     uinput-replay.c \
     uinput-replay.h \
     $(NULL)
+ibus_keypress_CFLAGS =
 if ENABLE_GTK4
-ibus_keypress_CFLAGS = @GTK4_CFLAGS@ @LIBEVDEV_CFLAGS@
+ibus_keypress_CFLAGS += @GTK4_CFLAGS@ @LIBEVDEV_CFLAGS@
 ibus_keypress_LDADD = @GTK4_LIBS@ @LIBEVDEV_LIBS@ $(prog_ldadd)
 else
 if ENABLE_GTK3
-ibus_keypress_CFLAGS = @GTK3_CFLAGS@ @LIBEVDEV_CFLAGS@
+ibus_keypress_CFLAGS += @GTK3_CFLAGS@ @LIBEVDEV_CFLAGS@
 ibus_keypress_LDADD = @GTK3_LIBS@ @LIBEVDEV_LIBS@ $(prog_ldadd)
 endif
 endif
+ibus_keypress_CFLAGS += -DUINPUT_REPLAY_DEVICE_EMBED_DATA
 
 ibus_keyval_SOURCES = ibus-keyval.c
 ibus_keyval_CFLAGS = @GTK4_CFLAGS@

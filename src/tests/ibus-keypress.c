@@ -21,13 +21,24 @@
  * USA
  */
 
+#include <config.h>
+
 #include <gtk/gtk.h>
 #include <glib/gstdio.h> /* g_access() */
 #include "ibus.h"
 #include <fcntl.h> /* creat() */
 #include <locale.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
+
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
+
+#ifdef G_OS_UNIX
+#include <glib-unix.h>
+#endif
 
 #include "ibus-keypress-data.h"
 
@@ -36,12 +47,25 @@
 #define NC    "\033[0m"
 #define RECV_KEY "RECEIVED_KEY_EVENTS\n"
 #define FAILED_ENGINE "FAILED_ENGINE\n"
+#define FOCUSED_ENGINE "FOCUSED_ENGINE:"
 #define IO_CHANNEL_BUFF_SIZE 1024
+
+#define ibus_break_if_fail(expr) \
+    G_STMT_START { \
+        if (G_LIKELY (expr)) { \
+        } else { \
+            g_return_if_fail_warning (G_LOG_DOMAIN, \
+                                      G_STRFUNC, \
+                                      #expr); \
+            break; \
+        } \
+    } G_STMT_END
 
 typedef enum {
     TEST_PROCESS_KEY_EVENT,
     TEST_CREATE_ENGINE,
-    TEST_DELAYED_FOCUS_IN
+    TEST_DELAYED_FOCUS_IN,
+    TEST_WAIT_CHILD_EXIT
 } TestIdleCategory;
 
 typedef struct _GTestDataMain {
@@ -68,7 +92,8 @@ static IBusEngine *m_engine;
 static GMainLoop *m_loop;
 static char *m_engine_is_focused;
 static struct uinput_replay_device *m_replay;
-static int m_pipe_engine[2];
+static int m_sv[2];
+static pid_t m_pid;
 
 #if GTK_CHECK_VERSION (4, 0, 0)
 static void     event_controller_enter_cb (GtkEventController *controller,
@@ -104,6 +129,17 @@ _wait_for_key_release_cb (gpointer user_data)
 }
 
 
+#ifdef HAVE_SYS_PRCTL_H
+static gboolean
+_on_sigusr1 (void)
+{
+    g_info ("The parent process died.");
+    ibus_quit ();
+    return G_SOURCE_REMOVE;
+}
+#endif
+
+
 static gboolean
 io_watch_engine (GIOChannel   *channel,
                  GIOCondition  condition,
@@ -114,6 +150,10 @@ io_watch_engine (GIOChannel   *channel,
     GError *error = NULL;
     gboolean do_quit = FALSE;
 
+    if (condition & G_IO_HUP) {
+            ibus_quit ();
+            return G_SOURCE_REMOVE;
+    }
     if (!(condition & G_IO_ERR)) {
         str = g_string_sized_new (IO_CHANNEL_BUFF_SIZE);
         do status = g_io_channel_read_line_string (channel, str, NULL, &error);
@@ -122,6 +162,7 @@ io_watch_engine (GIOChannel   *channel,
             do_quit = TRUE;
         g_string_free (str, TRUE);
         if (do_quit) {
+            g_info ("Received RECV");
             ibus_quit ();
             return G_SOURCE_REMOVE;
         }
@@ -146,6 +187,15 @@ io_watch_main (GIOChannel   *channel,
         while (status == G_IO_STATUS_AGAIN);
         if (!g_strcmp0 (str->str, FAILED_ENGINE))
             do_quit = TRUE;
+        if (g_str_has_prefix (str->str, FOCUSED_ENGINE)) {
+            g_free (m_engine_is_focused);
+            if (strlen (str->str + strlen (FOCUSED_ENGINE)) > 1) {
+                m_engine_is_focused =
+                        g_strdup (str->str + strlen (FOCUSED_ENGINE));
+            } else {
+                m_engine_is_focused = NULL;
+            }
+        }
         g_string_free (str, TRUE);
         if (do_quit) {
             ibus_quit ();
@@ -153,6 +203,64 @@ io_watch_main (GIOChannel   *channel,
         }
     }
     return G_SOURCE_CONTINUE;
+}
+
+
+static void
+take_screenshot (void)
+{
+    GDateTime *dt;
+    gchar *prgname = NULL;
+    gchar *casename = NULL;
+    gchar *filename = NULL;
+    gchar *path = NULL;
+    gchar *args[4] = { "gnome-screenshot", "--file", 0, 0 };
+    GSpawnFlags flags = G_SPAWN_SEARCH_PATH;
+    gchar *std_output = NULL;
+    gchar *std_error = NULL;
+    GError *error = NULL;
+
+    dt = g_date_time_new_now_local ();
+    g_return_if_fail (dt);
+
+    do {
+        prgname = g_path_get_basename (g_get_prgname ());
+        casename = g_path_get_basename (g_test_get_path ());
+        ibus_break_if_fail (prgname);
+        ibus_break_if_fail (casename);
+        filename = g_strdup_printf ("%s%s-%02d%02d%02d.png",
+                                    prgname, casename,
+                                    g_date_time_get_hour (dt),
+                                    g_date_time_get_minute (dt),
+                                    g_date_time_get_second (dt));
+        ibus_break_if_fail (filename);
+        /* The ibus-compose-locales runs in a temp dir. */
+        path = g_build_filename (g_get_home_dir (), filename, NULL);
+        ibus_break_if_fail (path);
+        args[2] = path;
+        if (!g_spawn_sync (NULL, args, NULL, flags, NULL, NULL,
+                           &std_output, &std_error,
+                           NULL,
+                           &error)) {
+            g_warning ("Failed to take a screenshot: %s: %s: %s",
+                       error->message,
+                       std_output ? std_output : "",
+                       std_error ? std_error : "");
+            g_error_free (error);
+        } else if (std_error && *std_error) {
+            g_warning ("Failed to take a screenshot: %s: %s",
+                       std_output ? std_output : "",
+                       std_error);
+        }
+    } while (FALSE);
+
+    g_free (prgname);
+    g_free (casename);
+    g_date_time_unref (dt);
+    g_free (filename);
+    g_free (path);
+    g_free (std_output);
+    g_free (std_error);
 }
 
 
@@ -195,6 +303,28 @@ idle_cb (gpointer user_data)
         terminate_program = TRUE;
         n = 0;
         break;
+    case TEST_WAIT_CHILD_EXIT: {
+        int status = 0;
+        pid_t pid = waitpid (m_pid, &status, WNOHANG);
+        if (pid == m_pid) {
+            g_info ("Exited the child process with status %d",
+                    WEXITSTATUS (status));
+        } else if (pid) {
+            g_test_fail_printf ("Failed waitpid");
+            terminate_program = TRUE;
+        } else if (n++ < 10) {
+            g_info ("Waiting for exiting the child process %d %dth times",
+                    m_pid, n);
+            return G_SOURCE_CONTINUE;
+        } else {
+            g_test_fail_printf ("Expire to wait for exiting thie child "
+                                "process %d", m_pid);
+            terminate_program = TRUE;
+        }
+        n = 0;
+        g_main_loop_quit (m_loop);
+        break;
+    }
     default:
         g_test_fail_printf ("Idle func is called by wrong category:%d.",
                             data->category);
@@ -216,11 +346,16 @@ engine_focus_in_cb (IBusEngine *engine,
 {
 #ifdef IBUS_FOCUS_IN_ID
     g_test_message ("Engine:focus-in-cb(%s, %s)", object_path, client);
-    m_engine_is_focused = g_strdup (client);
+    m_engine_is_focused = g_strdup_printf ("%s%s\n",
+                                           FOCUSED_ENGINE, object_path);
 #else
     g_test_message ("Engine:focus-in-cb()");
-    m_engine_is_focused = g_strdup ("No named");
+    m_engine_is_focused = g_strdup_printf ("%s%s\n",
+                                           FOCUSED_ENGINE, "No named");
 #endif
+    write (m_sv[1], m_engine_is_focused,
+                             strlen (m_engine_is_focused) + 1);
+    fsync (m_sv[1]);
 }
 
 
@@ -232,11 +367,14 @@ engine_focus_out_cb (IBusEngine *engine,
                      gpointer    user_data)
 {
 #ifdef IBUS_FOCUS_IN_ID
-    g_test_message ("Engine:focus-out-cb(%s, %s)", object_path, client);
+    g_test_message ("Engine:focus-out-cb(%s)", object_path);
 #else
     g_test_message ("Engine:focus-out-cb()");
 #endif
     g_clear_pointer (&m_engine_is_focused, g_free);
+    write (m_sv[1], FOCUSED_ENGINE "\n",
+                             strlen (FOCUSED_ENGINE) + 2);
+    fsync (m_sv[1]);
 }
 
 
@@ -374,12 +512,25 @@ exec_ibus_engine ()
     static TestIdleData _data = { .category = TEST_CREATE_ENGINE,
                                   .idle_id = 0 };
     GIOChannel *channel;
+    GIOFlags flags;
+
+    close (m_sv[0]);
+#ifdef HAVE_SYS_PRCTL_H
+#ifdef G_OS_UNIX
+    if (prctl (PR_SET_PDEATHSIG, SIGUSR1))
+        g_test_message ("Cannot bind SIGUSR1 for parent death");
+    else
+        g_unix_signal_add (SIGUSR1, (GSourceFunc)_on_sigusr1, NULL);
+#endif
+#endif
 
     m_loop = g_main_loop_new (NULL, TRUE);
 
-    g_assert ((channel =  g_io_channel_unix_new (m_pipe_engine[0])));
+    g_assert ((channel =  g_io_channel_unix_new (m_sv[1])));
     g_io_channel_set_buffer_size (channel, IO_CHANNEL_BUFF_SIZE);
-    g_io_add_watch (channel, G_IO_IN | G_IO_ERR, io_watch_engine, m_loop);
+    flags = g_io_channel_get_flags (channel);
+    g_io_channel_set_flags (channel, flags | G_IO_FLAG_NONBLOCK, NULL);
+    g_io_add_watch (channel, G_IO_IN | G_IO_ERR | G_IO_HUP, io_watch_engine, m_loop);
 
     /* IBusBus should not be generated in g_idle_add() */
     m_bus = ibus_bus_new ();
@@ -396,22 +547,21 @@ exec_ibus_engine ()
 
     g_main_loop_run (m_loop);
     if (_data.idle_id) {
-        write (m_pipe_engine[1], FAILED_ENGINE, sizeof (FAILED_ENGINE));
-        fsync (m_pipe_engine[1]);
-        close (m_pipe_engine[1]);
-        close (m_pipe_engine[0]);
+        write (m_sv[1], FAILED_ENGINE, sizeof (FAILED_ENGINE));
+        fsync (m_sv[1]);
+        close (m_sv[1]);
         exit (EXIT_FAILURE);
     }
     g_test_message ("Created engine");
     /* The third loop */
     ibus_main ();
+    g_main_loop_unref (m_loop);
     if (m_component)
         g_clear_object (&m_component);
     if (m_bus)
         g_clear_object (&m_bus);
     g_io_channel_unref (channel);
-    close (m_pipe_engine[0]);
-    close (m_pipe_engine[1]);
+    close (m_sv[1]);
     exit (EXIT_SUCCESS);
 }
 
@@ -431,12 +581,14 @@ destroy_window (gpointer user_data)
     data->source = 0;
 
     g_info ("Destroying window after timeout");
+    g_test_fail_printf ("Destroying window after timeout");
 #if GTK_CHECK_VERSION (4, 0, 0)
     gtk_window_destroy (GTK_WINDOW (data->window));
 #else
     gtk_widget_destroy (data->window);
 #endif
     data->window = NULL;
+    ibus_quit ();
 
     return G_SOURCE_REMOVE;
 }
@@ -488,10 +640,14 @@ exec_keypress (void)
 {
     g_test_message ("Started keypress");
 #ifdef UINPUT_REPLAY_DEVICE_EMBED_DATA
+    size_t i, length;
     guint prev_time = 0;
+    for (i = 0; test_data[0][i].index && i < 30000; ++i);
+    g_assert (i < 30000);
+    length = i;
     /* Because uinput doesn't take that long (for our recordings anyway) we can
      * simply create and run this here this here. */
-    for (size_t i = 0; i < G_N_ELEMENTS (test_data); ++i) {
+    for (i = 0; i < length; ++i) {
         uinput_replay_device_replay_event (m_replay,
                                            &test_data[0][i],
                                            &prev_time);
@@ -520,6 +676,8 @@ set_engine_cb (GObject      *object,
         g_error_free (error);
         return;
     }
+    if (g_getenv ("IBUS_TEST_SCREENSHOT"))
+        take_screenshot ();
 
     /* See ibus-compose:set_engine_cb() */
     if (is_integrated_desktop () && g_getenv ("IBUS_DAEMON_WITH_SYSTEMD")) {
@@ -536,6 +694,8 @@ set_engine_cb (GObject      *object,
     }
 
     exec_keypress ();
+    if (g_getenv ("IBUS_TEST_SCREENSHOT"))
+        take_screenshot ();
 }
 
 
@@ -621,6 +781,8 @@ window_inserted_text_cb (GtkEntryBuffer *buffer,
     int k;
     gunichar code;
     const gchar *test;
+    static TestIdleData data = { .category = TEST_WAIT_CHILD_EXIT,
+                                 .idle_id = 0 };
 
     g_test_message ("Entry:inserted-text(chars:%s, nchars:%u)", chars, nchars);
     g_assert (nchars == 1);
@@ -653,9 +815,12 @@ window_inserted_text_cb (GtkEntryBuffer *buffer,
     if (!test_results[i][j]) {
         g_assert (!j);
 
-        write (m_pipe_engine[1], RECV_KEY, sizeof (RECV_KEY));
-        fsync (m_pipe_engine[1]);
-        close (m_pipe_engine[1]);
+        write (m_sv[0], RECV_KEY, sizeof (RECV_KEY));
+        fsync (m_sv[0]);
+        g_info ("Sent RECV");
+        /* Wait for calling ibus_quit() until the client receives RECV_KEY */
+        data.idle_id = g_timeout_add_seconds (1, idle_cb, &data);
+        g_main_loop_run (m_loop);
         ibus_quit ();
     }
 }
@@ -731,12 +896,13 @@ test_keypress (gconstpointer user_data)
     GTestDataMain *data = (GTestDataMain *)user_data;
 #endif
     GIOChannel *channel;
+    GIOFlags flags;
     WindowDestroyData destroy_data = { 0, };
 
-    int rc = pipe (m_pipe_engine);
+    int rc = socketpair (AF_UNIX, SOCK_STREAM, 0, m_sv);
     g_assert (rc == 0);
 
-    if (!fork ())
+    if (!(m_pid = fork ()))
         exec_ibus_engine ();
 
     /* FIXME: Calling this before the fork means we never get an ibus_bus_new().
@@ -748,8 +914,11 @@ test_keypress (gconstpointer user_data)
     gtk_init (&data->argc, &data->argv);
 #endif
 
-    g_assert ((channel =  g_io_channel_unix_new (m_pipe_engine[0])));
+    close (m_sv[1]);
+    g_assert ((channel =  g_io_channel_unix_new (m_sv[0])));
     g_io_channel_set_buffer_size (channel, IO_CHANNEL_BUFF_SIZE);
+    flags = g_io_channel_get_flags (channel);
+    g_io_channel_set_flags (channel, flags | G_IO_FLAG_NONBLOCK, NULL);
     g_io_add_watch (channel, G_IO_IN | G_IO_ERR, io_watch_main, NULL);
 
     m_bus = ibus_bus_new ();
@@ -762,6 +931,7 @@ test_keypress (gconstpointer user_data)
         return;
     }
 
+    m_loop = g_main_loop_new (NULL, TRUE);
     destroy_data.window = create_window ();
     destroy_data.source = g_timeout_add_seconds (30,
                                                  destroy_window,
@@ -769,6 +939,7 @@ test_keypress (gconstpointer user_data)
 
     ibus_main ();
 
+    g_main_loop_unref (m_loop);
     uinput_replay_device_destroy (g_steal_pointer (&m_replay));
     g_clear_pointer (&m_session_name, g_free);
     if (destroy_data.source)
@@ -779,8 +950,9 @@ test_keypress (gconstpointer user_data)
 #else
         gtk_widget_destroy (destroy_data.window);
 #endif
-    close (m_pipe_engine[0]);
-    close (m_pipe_engine[1]);
+    g_io_channel_unref (channel);
+    close (m_sv[0]);
+    g_info ("Parent exit");
 }
 
 

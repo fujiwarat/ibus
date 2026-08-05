@@ -1,7 +1,8 @@
 polkit.addRule(function(action, subject) {
     if ((action.id == "org.freedesktop.Flatpak.metadata-update" ||
          action.id == "org.freedesktop.Flatpak.modify-repo" ||
-         action.id == "org.freedesktop.fwupd.refresh-remote" ) &&
+         action.id == "org.freedesktop.fwupd.refresh-remote" ||
+         action.id == "org.freedesktop.NetworkManager.wifi.scan" ) &&
         subject.isInGroup("itestuser")) {
         return polkit.Result.YES;
     }

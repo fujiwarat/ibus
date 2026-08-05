@@ -127,7 +127,6 @@ get_compose_path ()
 static void
 take_screenshot (void)
 {
-    gint64 t;
     GDateTime *dt;
     gchar *prgname = NULL;
     gchar *casename = NULL;
@@ -139,9 +138,7 @@ take_screenshot (void)
     gchar *std_error = NULL;
     GError *error = NULL;
 
-    t = g_get_real_time ();
-    t = t / G_USEC_PER_SEC;
-    dt = g_date_time_new_from_unix_utc (t);
+    dt = g_date_time_new_now_local ();
     g_return_if_fail (dt);
 
     do {
@@ -485,6 +482,8 @@ set_engine_cb (GObject      *object,
         g_error_free (error);
         return;
     }
+    if (g_getenv ("IBUS_TEST_SCREENSHOT"))
+        take_screenshot ();
 
     /* ibus_im_context_focus_in() is called after GlboalEngine is set.
      * The focus-in/out events happen more slowly in a busy system
@@ -508,8 +507,6 @@ set_engine_cb (GObject      *object,
         return;
     }
 
-    if (g_getenv ("IBUS_TEST_SCREENSHOT"))
-        take_screenshot ();
     send_key_event (m_compose_table);
     if (m_no_load_compose_table)
         send_key_event (m_no_load_compose_table);
