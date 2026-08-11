@@ -40,8 +40,36 @@
 #include "virtual-keyboard-unstable-v1-client-protocol.h"
 #include "ibuswaylandim.h"
 
+#define IBUS_KEYMAP_MAX_LEVELS 5
+
 /* keysym & keycode should not be logged for the security issue. */
 /* #define IBUS_LOG_SHOW_KEYSYM */
+
+#define clear_keycode2sym(keycode2sym)                                        \
+{                                                                             \
+    guint **_keycode2sym;                                                     \
+    if (G_LIKELY (keycode2sym)) {                                             \
+        _keycode2sym = *(keycode2sym);                                        \
+        if (_keycode2sym) {                                                   \
+            guint max_keycode, i;                                             \
+            if (G_LIKELY (_keycode2sym[0])) {                                 \
+                max_keycode = _keycode2sym[0][0];                             \
+                if (G_UNLIKELY (max_keycode == 0))                            \
+                    g_warning ("The memory of keycode2sym[0] is leaked");     \
+                for (i = 0; i <= max_keycode; ++i) {                          \
+                    g_slice_free1 (sizeof (guint) * IBUS_KEYMAP_MAX_LEVELS,   \
+                                   _keycode2sym[i]);                          \
+                }                                                             \
+                g_slice_free1 (sizeof (guint *) * (max_keycode + 1),          \
+                               _keycode2sym);                                 \
+            } else {                                                          \
+                g_warning ("The memory of keycode2sym is leaked");            \
+            }                                                                 \
+            *(keycode2sym) = NULL;                                            \
+        }                                                                     \
+    }                                                                         \
+}
+
 
 enum {
     PROP_0 = 0,
@@ -120,6 +148,7 @@ typedef struct _IBusXkbKeymap
 {
     struct xkb_keymap *keymap;
     struct xkb_state *state;
+    guint **keycode2sym;
 
     xkb_mod_mask_t shift_mask;
     xkb_mod_mask_t lock_mask;
@@ -283,11 +312,134 @@ _get_char_env (const gchar *name,
 }
 
 
+static void
+keymap_calc_keysym_cb (struct xkb_keymap *keymap,
+                       xkb_keycode_t      keycode,
+                       void              *data)
+{
+    IBusXkbKeymap *active_key = (IBusXkbKeymap *)data;
+    const xkb_keysym_t *syms = NULL;
+    guint levels, num_syms, i;
+
+    g_assert (active_key);
+    g_assert (active_key->keymap == keymap);
+    g_assert (active_key->state);
+
+    levels = xkb_keymap_num_levels_for_key (active_key->keymap, keycode, 0);
+    if (levels > IBUS_KEYMAP_MAX_LEVELS) {
+        g_warning ("keymap levels %u are higher than %u",
+                   levels, IBUS_KEYMAP_MAX_LEVELS);
+    }
+    for (i = 0; i < levels && i < IBUS_KEYMAP_MAX_LEVELS; ++i) {
+        num_syms = xkb_keymap_key_get_syms_by_level (active_key->keymap,
+                                                     keycode,
+                                                     0,
+                                                     i,
+                                                     &syms);
+        if (num_syms > 0)
+            active_key->keycode2sym[keycode][i] = syms[0];
+        else
+            active_key->keycode2sym[keycode][i] = XKB_KEY_NoSymbol;
+    }
+    for (; i < IBUS_KEYMAP_MAX_LEVELS; ++i)
+        active_key->keycode2sym[keycode][i] = XKB_KEY_NoSymbol;
+}
+
+
+static guint
+keycode2sym_get_keysym (guint         **keycode2sym,
+                        guint           keyval,
+                        xkb_mod_mask_t *latched_mods)
+{
+    guint keycode = 0;
+    guint max_keycode, min_keycode, i, j;
+
+    g_assert (keycode2sym);
+    g_assert (latched_mods);
+    g_return_val_if_fail (keycode2sym[0], 0);
+    max_keycode = keycode2sym[0][0];
+    min_keycode = keycode2sym[0][1];
+    *latched_mods = 0;
+    for (i = min_keycode; i <= max_keycode && !keycode; ++i) {
+        for (j = 0; j < IBUS_KEYMAP_MAX_LEVELS; ++j) {
+            if (keyval == keycode2sym[i][j]) {
+                keycode = i;
+                if (j)
+                    *latched_mods |= (1 << (j - 1));
+                return keycode;
+            }
+        }
+    }
+    return 0;
+}
+
+
+static xkb_mod_mask_t
+ibus_xkb_keymap_mods_to_xkb_mods (IBusXkbKeymap  *active_key,
+                                  guint modifiers)
+{
+    xkb_mod_mask_t mask = 0;
+
+    g_assert (active_key);
+    if (modifiers & IBUS_SHIFT_MASK)
+        mask |= active_key->shift_mask;
+    if (modifiers & IBUS_CONTROL_MASK)
+        mask |= active_key->control_mask;
+    if (modifiers & IBUS_MOD1_MASK)
+        mask |= active_key->mod1_mask;
+    if (modifiers & IBUS_MOD2_MASK)
+        mask |= active_key->mod2_mask;
+    if (modifiers & IBUS_MOD3_MASK)
+        mask |= active_key->mod3_mask;
+    if (modifiers & IBUS_MOD4_MASK)
+        mask |= active_key->mod4_mask;
+    if (modifiers & IBUS_MOD5_MASK)
+        mask |= active_key->mod5_mask;
+    if (modifiers & IBUS_SUPER_MASK)
+        mask |= active_key->super_mask;
+    if (modifiers & IBUS_HYPER_MASK)
+        mask |= active_key->hyper_mask;
+    if (modifiers & IBUS_META_MASK)
+        mask |= active_key->meta_mask;
+    return mask;
+}
+
+
+static void
+ibus_xkb_keymap_gen_keycode2sym (IBusXkbKeymap  *active_key)
+{
+    guint max_keycode, min_keycode, i;
+
+    g_assert (active_key);
+    g_assert (active_key->keymap);
+    g_assert (!active_key->keycode2sym);
+    g_return_if_fail (active_key->state);
+
+    max_keycode = xkb_keymap_max_keycode (active_key->keymap);
+    min_keycode = xkb_keymap_min_keycode (active_key->keymap);
+    if (min_keycode == 0)
+        g_warning ("The keymap has minimum keycode 0");
+    active_key->keycode2sym = (guint **)g_slice_alloc (
+        sizeof (guint *) * (max_keycode + 1));
+    g_return_if_fail (active_key->keycode2sym);
+    for (i = 0; i <= max_keycode; ++i) {
+        active_key->keycode2sym[i] = (guint *)g_slice_alloc (
+                sizeof (guint) * IBUS_KEYMAP_MAX_LEVELS);
+    }
+    g_return_if_fail (active_key->keycode2sym[0]);
+    active_key->keycode2sym[0][0] = max_keycode;
+    active_key->keycode2sym[0][1] = min_keycode;
+    xkb_keymap_key_for_each (active_key->keymap,
+                             keymap_calc_keysym_cb,
+                             active_key);
+}
+
+
 static gboolean
 ibus_wayland_source_prepare (GSource *base,
                              gint    *timeout)
 {
-    IBusWaylandSource *source = (IBusWaylandSource *) base;
+    IBusWaylandSource *source = (IBusWaylandSource *)base;
 
     *timeout = -1;
 
@@ -300,7 +452,7 @@ ibus_wayland_source_prepare (GSource *base,
 static gboolean
 ibus_wayland_source_check (GSource *base)
 {
-    IBusWaylandSource *source = (IBusWaylandSource *) base;
+    IBusWaylandSource *source = (IBusWaylandSource *)base;
 
     if (source->pfd.revents & (G_IO_ERR | G_IO_HUP))
         g_error ("Lost connection to wayland compositor");
@@ -314,7 +466,7 @@ ibus_wayland_source_dispatch (GSource    *base,
                               GSourceFunc callback,
                               gpointer    data)
 {
-    IBusWaylandSource *source = (IBusWaylandSource *) base;
+    IBusWaylandSource *source = (IBusWaylandSource *)base;
 
     if (source->pfd.revents) {
         wl_display_dispatch (source->display);
@@ -515,11 +667,11 @@ ibus_wayland_im_commit_key_event (IBusWaylandIM  *wlim,
 
 
 static void
-ibus_wayland_im_key (IBusWaylandIM *wlim,
-                     uint32_t       key_serial,
-                     uint32_t       time,
-                     uint32_t       key,
-                     uint32_t       state)
+ibus_wayland_im_keycode (IBusWaylandIM *wlim,
+                         uint32_t       key_serial,
+                         uint32_t       time,
+                         uint32_t       key,
+                         uint32_t       state)
 {
     IBusWaylandIMPrivate *priv;
     g_return_if_fail (IBUS_IS_WAYLAND_IM (wlim));
@@ -551,6 +703,66 @@ ibus_wayland_im_key (IBusWaylandIM *wlim,
 
 
 static void
+ibus_wayland_im_keycode_with_latch (IBusWaylandIM *wlim,
+                                    uint32_t       key_serial,
+                                    uint32_t       time,
+                                    uint32_t       key,
+                                    uint32_t       state,
+                                    xkb_mod_mask_t latched_mods)
+{
+    IBusWaylandIMPrivate *priv;
+    xkb_mod_mask_t orig_depressed_mods = 0;
+    xkb_mod_mask_t orig_latched_mods = 0;
+    xkb_mod_mask_t orig_locked_mods = 0;
+    xkb_layout_index_t orig_latched_group = 0;
+
+    g_return_if_fail (IBUS_IS_WAYLAND_IM (wlim));
+    priv = ibus_wayland_im_get_instance_private (wlim);
+    if (priv->key_user.state) {
+        orig_depressed_mods =
+                xkb_state_serialize_mods (priv->key_user.state,
+                                          XKB_STATE_MODS_DEPRESSED);
+        orig_latched_mods = xkb_state_serialize_mods (priv->key_user.state,
+                                                      XKB_STATE_MODS_LATCHED);
+        orig_locked_mods = xkb_state_serialize_mods (priv->key_user.state,
+                                                     XKB_STATE_MODS_LOCKED);
+        orig_latched_group =
+                xkb_state_serialize_layout (priv->key_user.state,
+                                            XKB_STATE_LAYOUT_EFFECTIVE);
+        xkb_state_update_mask (priv->key_user.state,
+                               latched_mods, latched_mods,
+                               0,
+                               0,
+                               orig_latched_group,
+                               orig_latched_group);
+        zwp_virtual_keyboard_v1_modifiers (
+                    priv->seat->virtual_keyboard,
+                    latched_mods,
+                    latched_mods,
+                    0,
+                    orig_latched_group);
+    }
+    ibus_wayland_im_keycode (wlim, key_serial, time, key, state);
+    if (orig_depressed_mods || orig_latched_mods || orig_locked_mods ||
+        orig_latched_group) {
+        xkb_state_update_mask (priv->key_user.state,
+                               orig_depressed_mods,
+                               orig_latched_mods,
+                               orig_locked_mods,
+                               0,
+                               orig_latched_group,
+                               orig_latched_group);
+        zwp_virtual_keyboard_v1_modifiers (
+                    priv->seat->virtual_keyboard,
+                    orig_depressed_mods,
+                    orig_latched_mods,
+                    orig_locked_mods,
+                    orig_latched_group);
+    }
+}
+
+
+static void
 ibus_wayland_im_forward_key_event (IBusWaylandIM *wlim,
                                    uint32_t       im_serial,
                                    guint          keyval,
@@ -559,6 +771,9 @@ ibus_wayland_im_forward_key_event (IBusWaylandIM *wlim,
                                    guint          modifiers)
 {
     IBusWaylandIMPrivate *priv;
+    IBusXkbKeymap  *active_key = NULL;
+    xkb_mod_mask_t latched_mods = 0;
+
     g_return_if_fail (IBUS_IS_WAYLAND_IM (wlim));
     priv = ibus_wayland_im_get_instance_private (wlim);
     switch (priv->version) {
@@ -571,20 +786,64 @@ ibus_wayland_im_forward_key_event (IBusWaylandIM *wlim,
                                             modifiers);
         break;
     case INPUT_METHOD_V2:
-        /* IMv2 has no keysym request; the only way to forward a key is via
-         * the virtual keyboard, which takes an evdev keycode.  Use the
-         * keycode from the engine when available.  Engines that synthesize
-         * key events without a real keycode pass keycode=0.
-         */
-        if (keycode != 0) {
-            ibus_wayland_im_key (wlim,
-                                 im_serial,
-                                 0,
-                                 keycode,
-                                 state);
-        } else {
--           g_warning ("TODO");
+        if (!keycode && keyval) {
+            active_key = NULL;
+            if (priv->key_user.state) {
+                active_key = &priv->key_user;
+                if (!active_key->keycode2sym)
+                    ibus_xkb_keymap_gen_keycode2sym (active_key);
+            }
+            if (active_key && active_key->keycode2sym) {
+                if (active_key->state) {
+                    latched_mods = ibus_xkb_keymap_mods_to_xkb_mods (
+                            active_key,
+                            modifiers);
+                }
+                keycode = keycode2sym_get_keysym (active_key->keycode2sym,
+                                                  keyval,
+                                                  &latched_mods);
+            }
+            if (!keycode) {
+                active_key = NULL;
+                if (priv->key_sys.state) {
+                    active_key = &priv->key_sys;
+                    if (!active_key->keycode2sym)
+                        ibus_xkb_keymap_gen_keycode2sym (active_key);
+                }
+                if (active_key && active_key->keycode2sym) {
+                    if (active_key->state) {
+                        latched_mods = ibus_xkb_keymap_mods_to_xkb_mods (
+                                active_key,
+                                modifiers);
+                    }
+                    keycode = keycode2sym_get_keysym (active_key->keycode2sym,
+                                                      keyval,
+                                                      &latched_mods);
+                }
+            }
+            if (!keycode) {
+                g_warning ("Failed to get keycode from keysym 0x%X", keyval);
+                active_key = NULL;
+                break;
+            }
+        } else if (keycode) {
+            active_key = NULL;
+            if (priv->key_user.state)
+                active_key = &priv->key_user;
+            else if (priv->key_sys.state)
+                active_key = &priv->key_sys;
+            if (active_key->state) {
+                latched_mods = ibus_xkb_keymap_mods_to_xkb_mods (
+                        active_key,
+                        modifiers);
+            }
         }
+        ibus_wayland_im_keycode_with_latch (wlim,
+                                            priv->im_serial,
+                                            0,
+                                            keycode - 8,
+                                            state,
+                                            latched_mods);
         break;
     default:
         g_assert_not_reached ();
@@ -1505,6 +1764,7 @@ ibus_xkb_keymap_update_with_keymap (IBusXkbKeymap     *ibus_keymap,
         xkb_state_unref (ibus_keymap->state);
     if (ibus_keymap->keymap)
         xkb_keymap_unref (ibus_keymap->keymap);
+    clear_keycode2sym (&ibus_keymap->keycode2sym);
     ibus_keymap->keymap = xkb_keymap_ref (keymap);
     ibus_keymap->state = state;
 
@@ -1808,11 +2068,11 @@ _process_key_event_done (GObject      *object,
     }
     /* Check retral from ibus_wayland_im_post_key() */
     if (priv->ibuscontext && !retval) {
-        ibus_wayland_im_key (event->wlim,
-                             event->key_serial,
-                             event->time,
-                             event->key,
-                             event->state);
+        ibus_wayland_im_keycode (event->wlim,
+                                 event->key_serial,
+                                 event->time,
+                                 event->key,
+                                 event->state);
     }
 
     g_slice_free (IBusWaylandKeyEvent, event);
@@ -1892,11 +2152,11 @@ _process_key_event_sync (IBusWaylandIM       *wlim,
                                        event->sym,
                                        retval);
     if (!retval) {
-        ibus_wayland_im_key (wlim,
-                             event->key_serial,
-                             event->time,
-                             event->key,
-                             event->state);
+        ibus_wayland_im_keycode (wlim,
+                                 event->key_serial,
+                                 event->time,
+                                 event->key,
+                                 event->state);
     }
 }
 
@@ -1996,11 +2256,11 @@ _process_key_event_hybrid_async (IBusWaylandIM       *wlim,
                                                         async_event->retval);
     }
     if (priv->ibuscontext && !async_event->retval) {
-        ibus_wayland_im_key (wlim,
-                             event->key_serial,
-                             event->time,
-                             event->key,
-                             event->state);
+        ibus_wayland_im_keycode (wlim,
+                                 event->key_serial,
+                                 event->time,
+                                 event->key,
+                                 event->state);
     }
     g_slice_free (IBusWaylandKeyEvent, async_event);
 }
@@ -2219,7 +2479,7 @@ input_method_keyboard_key (void                      *data,
     g_return_if_fail (IBUS_IS_WAYLAND_IM (wlim));
     priv = ibus_wayland_im_get_instance_private (wlim);
     if (!priv->key_user.state && !priv->key_sys.state) {
-        ibus_wayland_im_key (wlim, key_serial, time, key, state);
+        ibus_wayland_im_keycode (wlim, key_serial, time, key, state);
         return;
     }
 
@@ -2231,7 +2491,7 @@ input_method_keyboard_key (void                      *data,
                                                     0,
                                                     FALSE);
         if (!retval)
-            ibus_wayland_im_key (wlim, key_serial, time, key, state);
+            ibus_wayland_im_keycode (wlim, key_serial, time, key, state);
         return;
     }
 
@@ -3535,6 +3795,8 @@ ibus_wayland_im_destroy (IBusObject *object)
     g_clear_pointer (&priv->key_user.keymap, xkb_keymap_unref);
     g_clear_pointer (&priv->key_sys.keymap, xkb_keymap_unref);
     g_clear_pointer (&priv->xkb_context, xkb_context_unref);
+    clear_keycode2sym (&priv->key_user.keycode2sym);
+    clear_keycode2sym (&priv->key_sys.keycode2sym);
     if (priv->log) {
         fclose (priv->log);
         priv->log = NULL;
