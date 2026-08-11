@@ -4,7 +4,7 @@ project('ibus',
       'sh', '-c',
       '. "@0@" 2>/dev/null; test "x$IBUS_RELEASED" = "x1" && echo -n "" || echo -n "@1@"'.format(
           meson.current_source_dir() / 'meson.config',
-          '-alpha2'),
+          '-beta1'),
       check: true).stdout().strip()),
   meson_version: '>= 1.5',
   license: 'LGPL-2.1-or-later'
