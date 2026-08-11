@@ -551,11 +551,12 @@ ibus_wayland_im_key (IBusWaylandIM *wlim,
 
 
 static void
-ibus_wayland_im_keysym (IBusWaylandIM *wlim,
-                        uint32_t       im_serial,
-                        guint          keyval,
-                        uint32_t       state,
-                        guint          modifiers)
+ibus_wayland_im_forward_key_event (IBusWaylandIM *wlim,
+                                   uint32_t       im_serial,
+                                   guint          keyval,
+                                   guint          keycode,
+                                   uint32_t       state,
+                                   guint          modifiers)
 {
     IBusWaylandIMPrivate *priv;
     g_return_if_fail (IBUS_IS_WAYLAND_IM (wlim));
@@ -570,7 +571,20 @@ ibus_wayland_im_keysym (IBusWaylandIM *wlim,
                                             modifiers);
         break;
     case INPUT_METHOD_V2:
-        g_warning ("TODO");
+        /* IMv2 has no keysym request; the only way to forward a key is via
+         * the virtual keyboard, which takes an evdev keycode.  Use the
+         * keycode from the engine when available.  Engines that synthesize
+         * key events without a real keycode pass keycode=0.
+         */
+        if (keycode != 0) {
+            ibus_wayland_im_key (wlim,
+                                 im_serial,
+                                 0,
+                                 keycode,
+                                 state);
+        } else {
+-           g_warning ("TODO");
+        }
         break;
     default:
         g_assert_not_reached ();
@@ -855,11 +869,12 @@ _context_forward_key_event_cb (IBusInputContext *context,
     else
         state = WL_KEYBOARD_KEY_STATE_PRESSED;
 
-    ibus_wayland_im_keysym (wlim,
-                            priv->im_serial,
-                            keyval,
-                            state,
-                            modifiers);
+    ibus_wayland_im_forward_key_event (wlim,
+                                       priv->im_serial,
+                                       keyval,
+                                       keycode,
+                                       state,
+                                       modifiers);
 }
 
 
