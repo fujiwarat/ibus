@@ -1626,12 +1626,27 @@ ibus_im_context_set_client_window (GtkIMContext *context,
 #else
         GtkStyle        *style_context;
 #endif
+        char *envvar = g_strdup (g_getenv ("GTK_IM_MODULE"));
         ibusimcontext->client_window = g_object_ref (client);
 #if !GTK_CHECK_VERSION (3, 98, 4)
         if (!ibusimcontext->use_button_press_event && _use_sync_mode == 0)
             _connect_button_press_event (ibusimcontext, TRUE);
 #endif
+        /* gtk_text_view_init() calls gtk_im_context_set_client_widget()
+         * in GTK 4.23.
+         */
+        g_setenv ("GTK_IM_MODULE", "gtk-im-context-none", TRUE);
+        /* Need a new GtkTextView since application's GtkTextView could have
+         * some customizations of the theme colors so even if `client`
+         * is GtkTextView, it won't be applied here.
+         */
         ibusimcontext->text_view = g_object_ref_sink (gtk_text_view_new ());
+        if (envvar) {
+            g_setenv ("GTK_IM_MODULE", envvar, TRUE);
+            g_free (envvar);
+        } else {
+            g_unsetenv ("GTK_IM_MODULE");
+        }
 #if GTK_CHECK_VERSION (2, 91, 0)
         style_context = gtk_widget_get_style_context (ibusimcontext->text_view);
 #else
@@ -1691,13 +1706,16 @@ _set_cursor_location_internal (IBusIMContext *ibusimcontext)
 
     if(ibusimcontext->client_window == NULL ||
        ibusimcontext->ibuscontext == NULL) {
-        return FALSE;
+        return G_SOURCE_REMOVE;
     }
 
     area = ibusimcontext->cursor_area;
 
 #if GTK_CHECK_VERSION (3, 98, 4)
     root = GTK_WIDGET (gtk_widget_get_root (ibusimcontext->client_window));
+    /* The Window is closing */
+    if (!root)
+        return G_SOURCE_REMOVE;
     /* Translates the given point in client_window coordinates to coordinates
        relative to root coordinate system. */
     if (!gtk_widget_compute_point (ibusimcontext->client_window,
@@ -1764,7 +1782,7 @@ _set_cursor_location_internal (IBusIMContext *ibusimcontext)
     }
 #endif
 
-    return FALSE;
+    return G_SOURCE_REMOVE;
 }
 
 static void
