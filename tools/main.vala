@@ -650,9 +650,12 @@ bool operate_daemon_in_kde_wayland(GLib.DBusConnection connection,
                             "restarted.\n");
                 } else {
                     stderr.printf("kwinrc is not updated for exit.\n");
-                    return true;
+                    return false;
                 }
             }
+        // KDE Plasma 6.7 no longer need kwinrc but run ibus-ui-gtk3 directly.
+        } else if (!is_updated && !start) {
+            return false;
         }
     } catch (GLib.KeyFileError e) {
         stderr.printf("%s\n", e.message);
