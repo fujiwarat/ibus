@@ -74,6 +74,18 @@ ibus_tests_env = {
   'srcdir': meson.current_source_dir(),
 }
 
+if enable_gtk4
+  ibus_tests_env += {
+    'TEST_GTK': '1',
+    'TEST_GTK_VERSION': '4',
+  }
+elif enable_gtk3
+  ibus_tests_env += {
+    'TEST_GTK': '1',
+    'TEST_GTK_VERSION': '3',
+  }
+endif
+
 foreach _test : ibus_tests
   if _test.get('is-script', false)
     test_bin = files([_test['name']])[0]
