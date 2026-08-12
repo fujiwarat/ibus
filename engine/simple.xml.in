@@ -3,7 +3,7 @@
     <name>org.freedesktop.IBus.Simple</name>
     <description>A table based simple engine</description>
     <exec>@libexecdir@/ibus-engine-simple</exec>
-    <version>1.5.33.20251113</version>
+    <version>1.5.35-beta1.20260812</version>
     <author>Peng Huang &lt;shawn.p.huang@gmail.com&gt;</author>
     <license>GPL</license>
     <homepage>https://github.com/ibus/ibus/wiki</homepage>
@@ -1099,6 +1099,18 @@
             <layout_variant>zawgyi</layout_variant>
             <longname>Burmese (Zawgyi)</longname>
             <description>Burmese (Zawgyi)</description>
+            <icon>ibus-keyboard</icon>
+            <rank>1</rank>
+        </engine>
+        <engine>
+            <name>xkb:mm:mara:mrh</name>
+            <language>mrh</language>
+            <license>GPL</license>
+            <author>Peng Huang &lt;shawn.p.huang@gmail.com&gt;</author>
+            <layout>mm</layout>
+            <layout_variant>mara</layout_variant>
+            <longname>Mara</longname>
+            <description>Mara</description>
             <icon>ibus-keyboard</icon>
             <rank>1</rank>
         </engine>
@@ -6786,6 +6798,18 @@
             <rank>1</rank>
         </engine>
         <engine>
+            <name>xkb:in:mara:mrh</name>
+            <language>mrh</language>
+            <license>GPL</license>
+            <author>Peng Huang &lt;shawn.p.huang@gmail.com&gt;</author>
+            <layout>in</layout>
+            <layout_variant>mara</layout_variant>
+            <longname>Mara</longname>
+            <description>Mara</description>
+            <icon>ibus-keyboard</icon>
+            <rank>1</rank>
+        </engine>
+        <engine>
             <name>xkb:in:mni:mni</name>
             <language>mni</language>
             <license>GPL</license>
@@ -9852,6 +9876,18 @@
             <layout_variant>thinkpad</layout_variant>
             <longname>Portuguese (Brazil, IBM/Lenovo ThinkPad)</longname>
             <description>Portuguese (Brazil, IBM/Lenovo ThinkPad)</description>
+            <icon>ibus-keyboard</icon>
+            <rank>1</rank>
+        </engine>
+        <engine>
+            <name>xkb:br:thinkpad_nodeadkeys:por</name>
+            <language>pt</language>
+            <license>GPL</license>
+            <author>Peng Huang &lt;shawn.p.huang@gmail.com&gt;</author>
+            <layout>br</layout>
+            <layout_variant>thinkpad_nodeadkeys</layout_variant>
+            <longname>Portuguese (Brazil, IBM/Lenovo ThinkPad, no dead keys)</longname>
+            <description>Portuguese (Brazil, IBM/Lenovo ThinkPad, no dead keys)</description>
             <icon>ibus-keyboard</icon>
             <rank>1</rank>
         </engine>
