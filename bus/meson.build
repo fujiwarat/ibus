@@ -72,7 +72,7 @@ if get_option('tests')
     test_bin = executable(_test['name'],
       test_sources,
       dependencies: ibus_daemon_deps + _test['extra_deps'],
-      c_args: ibus_daemon_cflags,
+      c_args: ibus_daemon_cflags + ibus_tests_cflags,
       include_directories: config_h_inc,
     )
 

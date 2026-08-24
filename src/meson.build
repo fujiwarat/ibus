@@ -129,7 +129,7 @@ ibus_deps = [
   gio_unix_dep,
 ]
 
-ibus_cflags = [
+ibus_lib_cflags = [
   '-DG_LOG_DOMAIN="@0@"'.format(ibus_log_domain),
   '-DIBUS_CACHE_DIR="@0@"'.format(get_option('localstatedir') / 'cache' / 'ibus'),
   '-DIBUS_DATA_DIR="@0@"'.format(pkgdatadir),
@@ -146,7 +146,7 @@ ibus_linkflags = cc.get_supported_link_arguments(
 
 gen_internal_compose_table = executable('gen-internal-compose-table',
   sources: gen_internal_compose_table_sources,
-  c_args: ibus_cflags,
+  c_args: ibus_lib_cflags,
   include_directories: config_h_inc,
   dependencies: ibus_deps,
 )
@@ -175,7 +175,7 @@ libibus = library('ibus-@0@'.format(ibus_api_version),
     files('ibuscomposetable.c'),
   ],
   dependencies: ibus_deps,
-  c_args: ibus_cflags,
+  c_args: ibus_lib_cflags,
   link_args: ibus_linkflags,
   include_directories: config_h_inc,
   version: ibus_abi_version,
@@ -208,7 +208,7 @@ pkgconfig.generate(libibus,
 
 # GObject Introspection (GIR) file
 if enable_introspection
-  ibus_gir_args = ibus_cflags + introspection_args
+  ibus_gir_args = ibus_lib_cflags + introspection_args
   if not introspection_dep.version().version_compare('>=0.9.6')
     ibus_gir_args += [ '--strip-prefix=IBus', ]
   endif
@@ -273,7 +273,7 @@ if get_option('emoji-dict')
   emoji_parser = executable('emoji-parser',
     'emoji-parser.c',
     dependencies: emoji_parser_deps,
-    c_args: ibus_cflags,
+    c_args: ibus_lib_cflags,
     include_directories: config_h_inc,
   )
 
@@ -343,7 +343,7 @@ if get_option('unicode-dict')
   unicode_parser = executable('unicode-parser',
     'unicode-parser.c',
     dependencies: unicode_parser_deps,
-    c_args: ibus_cflags,
+    c_args: ibus_lib_cflags,
     include_directories: config_h_inc,
   )
 

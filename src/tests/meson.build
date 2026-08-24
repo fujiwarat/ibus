@@ -56,13 +56,13 @@ ibus_tests_deps = [
   gio_dep,
 ]
 
-ibus_tests_cflags = [
+lib_tests_cflags = [
   '-DIBUS_DISABLE_DEPRECATION_WARNINGS',
   '-DX11_LOCALEDATADIR="@0@"'.format(x11_localedatadir),
 ]
 
 if libevdev_dep.found() and libudev_dep.found()
-  ibus_tests_cflags += '-DUINPUT_REPLAY_DEVICE_EMBED_DATA'
+  lib_tests_cflags += '-DUINPUT_REPLAY_DEVICE_EMBED_DATA'
 endif
 
 ibus_tests_runner = files(['runtest'])[0]
@@ -100,7 +100,7 @@ foreach _test : ibus_tests
     test_bin = executable(_test['name'],
       files(['@0@.c'.format(_test['name'])] + _test.get('extra_sources', [])),
       dependencies: ibus_tests_deps + _test.get('extra_deps', []),
-      c_args: ibus_tests_cflags,
+      c_args: lib_tests_cflags + ibus_tests_cflags,
       include_directories: config_h_inc,
       install: get_option('install-tests'),
       install_dir: test_execsdir,

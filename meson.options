@@ -54,6 +54,27 @@ option('setup',
   value: true,
   description: 'Install the IBus setup UI',
 )
+option('systemd-services',
+  type: 'feature',
+  value: 'auto',
+  description: 'Build IBus systemd service files',
+)
+option('libnotify',
+  type: 'boolean',
+  value: true,
+  description: 'Build with libnotify'
+)
+# IBus Configuration
+option('memconf',
+  type: 'boolean',
+  value: false,
+  description: 'Perform configure based on memory',
+)
+option('dconf',
+  type: 'feature',
+  value: 'auto',
+  description: 'Perform configure based on DConf',
+)
 # Supported GTK versions
 option('gtk2',
   type: 'feature',
@@ -93,27 +114,6 @@ option('x11-localedata-dir',
   value: '',
   description:
     'Path to an X11 localedata directory (if empty, uses the default)',
-)
-option('systemd-services',
-  type: 'feature',
-  value: 'auto',
-  description: 'Build IBus systemd service files',
-)
-option('libnotify',
-  type: 'boolean',
-  value: true,
-  description: 'Build with libnotify'
-)
-# Configuration
-option('memconf',
-  type: 'boolean',
-  value: false,
-  description: 'Perform configure based on memory',
-)
-option('dconf',
-  type: 'feature',
-  value: 'auto',
-  description: 'Perform configure based on DConf',
 )
 # Emoji / Unicode
 option('emoji-dict',

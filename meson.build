@@ -305,6 +305,26 @@ if get_option('tests')
   endif
 endif
 
+_ibus_cflags = [ '-DHAVE_CONFIG_H' ]
+_ibus_tests_cflags = []
+_ibus_link_args = []
+
+buildtype = get_option('buildtype')
+if buildtype != 'release'
+  if _version_split[2].contains('rc')
+    buildtype = 'release'
+  elif not _version_split[2].contains('-')
+    buildtype = 'release'
+  endif
+endif
+if buildtype == 'release'
+  _ibus_cflags += [ '-DG_DISABLE_CAST_CHECKS', '-Wl,-z,relro', '-Wl,-z,now' ]
+  _ibus_cflags += [ '-DG_DISABLE_ASSERT' ]
+  # GLib testing utilities do not work with `ibus_cflags`
+  _ibus_tests_cflags += [ '-UG_DISABLE_ASSERT' ]
+  _ibus_link_args += [ '-Wl,-Bsymbolic', '-fno-plt' ]
+endif
+
 # config.h
 #-------------------------------------------------
 conf = configuration_data()
@@ -337,6 +357,9 @@ conf.set('GLIB2_EMBED_ERRNO_H', glib_dep.found() and
 conf.set('DCONF_0_13_4', dconf_dep.found() and
                          dconf_dep.version().version_compare('>= 0.13.4'))
 conf.set('ENABLE_SURROUNDING', 'TRUE')
+if buildtype == 'release'
+    conf.set('HAVE_PRODUCT_BUILD', 'TRUE')
+endif
 
 configure_file(
   input: 'config.h.meson',
@@ -346,7 +369,12 @@ configure_file(
 
 config_h_inc = include_directories('.')
 
-add_project_arguments('-DHAVE_CONFIG_H', language: 'c')
+ibus_cflags =  cc.get_supported_arguments(_ibus_cflags)
+ibus_tests_cflags = cc.get_supported_arguments(_ibus_tests_cflags)
+ibus_link_args = cc.get_supported_link_arguments(_ibus_link_args)
+
+add_project_arguments(ibus_cflags, language: 'c')
+add_project_link_arguments(ibus_link_args, language: 'c')
 
 # Subdirectories
 #-------------------------------------------------
@@ -389,9 +417,9 @@ ibus_rpm_spec = configure_file(
 install_emptydir(get_option('datadir') / 'ibus' / 'engine')
 
 summary({
-  'Install prefix':                get_option('prefix'),
   'CFLAGS':                        get_option('c_args'),
   'LDFLAGS':                       get_option('c_link_args'),
+  'Install prefix':                get_option('prefix'),
   'Build endianness':              endian,
   'PYTHON':                        python.full_path(),
   'Build PyGObject':               enable_pygobject,
