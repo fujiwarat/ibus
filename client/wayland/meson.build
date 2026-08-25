@@ -112,7 +112,7 @@ if enable_introspection
     header: ibus_wayland_common_headers,
     includes: [ 'GLib-2.0', 'GObject-2.0', 'Gio-2.0', ],
     dependencies: ibus_wayland_deps,
-    extra_args: ibus_cflags + introspection_args,
+    extra_args: ibus_lib_cflags + introspection_args,
     export_packages: 'ibus-1.0',
   )
 

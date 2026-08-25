@@ -70,7 +70,7 @@ if enable_introspection
     ],
     header: libibusimmodule_headers,
     includes: [ 'GLib-2.0', ],
-    extra_args: ibus_cflags + introspection_args,
+    extra_args: ibus_lib_cflags + introspection_args,
   )
 
    ibusimmodule_vapi = gnome.generate_vapi('ibus-immodule-1.0',

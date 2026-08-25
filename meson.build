@@ -6,6 +6,11 @@ project('ibus',
           meson.current_source_dir() / 'meson.config',
           '-beta2'),
       check: true).stdout().strip()),
+  default_options: [
+    'debug=true',
+    'optimization=2',
+    'warning_level=1',
+  ],
   meson_version: '>= 1.5',
   license: 'LGPL-2.1-or-later'
 )
@@ -35,6 +40,15 @@ ibus_abi_revision = (100 * ibus_minor_version) + ibus_micro_version
 ibus_abi_version = '@0@.@1@.@2@'.format(ibus_abi_current,
                                         ibus_abi_age,
                                         ibus_abi_revision)
+
+buildtype = get_option('buildtype')
+if buildtype != 'release'
+  if _version_split[2].contains('rc')
+    buildtype = 'release'
+  elif not _version_split[2].contains('-')
+    buildtype = 'release'
+  endif
+endif
 
 # Some variables
 #-------------------------------------------------
@@ -305,26 +319,6 @@ if get_option('tests')
   endif
 endif
 
-_ibus_cflags = [ '-DHAVE_CONFIG_H' ]
-_ibus_tests_cflags = []
-_ibus_link_args = []
-
-buildtype = get_option('buildtype')
-if buildtype != 'release'
-  if _version_split[2].contains('rc')
-    buildtype = 'release'
-  elif not _version_split[2].contains('-')
-    buildtype = 'release'
-  endif
-endif
-if buildtype == 'release'
-  _ibus_cflags += [ '-DG_DISABLE_CAST_CHECKS', '-Wl,-z,relro', '-Wl,-z,now' ]
-  _ibus_cflags += [ '-DG_DISABLE_ASSERT' ]
-  # GLib testing utilities do not work with `ibus_cflags`
-  _ibus_tests_cflags += [ '-UG_DISABLE_ASSERT' ]
-  _ibus_link_args += [ '-Wl,-Bsymbolic', '-fno-plt' ]
-endif
-
 # config.h
 #-------------------------------------------------
 conf = configuration_data()
@@ -369,7 +363,45 @@ configure_file(
 
 config_h_inc = include_directories('.')
 
+_ibus_cflags = [ '-DHAVE_CONFIG_H' ]
+_ibus_tests_cflags = []
+_ibus_link_args = []
+
+cc_default_multi_warn_arguments = [
+  ['-Wformat', '-Werror=format-security']
+]
+
+env_CFLAGS = run_command(python, '-c',
+                         'import os; print(os.getenv("CFLAGS", ""))',
+                         check: true).stdout().strip()
+
+if buildtype == 'release'
+  _ibus_cflags += [ '-DG_DISABLE_CAST_CHECKS', '-Wl,-z,relro', '-Wl,-z,now' ]
+  _ibus_cflags += [ '-DG_DISABLE_ASSERT' ]
+  # GLib testing utilities do not work with `ibus_cflags`
+  _ibus_tests_cflags += [ '-UG_DISABLE_ASSERT' ]
+  _ibus_link_args += [ '-Wl,-Bsymbolic', '-fno-plt' ]
+endif
+
+# Use `meson setup -Db_sanitize=address,leak` to enable ASAN build
+# and need libasan package.
+# Set -fanalyzer C flag with b_sanitize option
+if get_option('b_sanitize') != 'none'
+  _ibus_cflags += [ '-fanalyzer' ]
+endif
+
+# Set default single arguments
 ibus_cflags =  cc.get_supported_arguments(_ibus_cflags)
+
+# cc.get_supported_arguments() does not support long nested arguments
+if env_CFLAGS == ''
+  foreach args : cc_default_multi_warn_arguments
+    if cc.has_multi_arguments(args)
+      ibus_cflags +=  args
+    endif
+  endforeach
+endif
+
 ibus_tests_cflags = cc.get_supported_arguments(_ibus_tests_cflags)
 ibus_link_args = cc.get_supported_link_arguments(_ibus_link_args)
 
@@ -417,13 +449,23 @@ ibus_rpm_spec = configure_file(
 install_emptydir(get_option('datadir') / 'ibus' / 'engine')
 
 summary({
-  'CFLAGS':                        get_option('c_args'),
-  'LDFLAGS':                       get_option('c_link_args'),
+  'CFLAGS':                        get_option('c_args') + ibus_cflags,
+  'LDFLAGS':                       get_option('c_link_args') + ibus_link_args,
+  'Build type':                    get_option('buildtype'),
+  'Debug':                         get_option('debug'),
+  'Optimization':                  get_option('optimization'),
+  'Warning level':                 get_option('warning_level'),
   'Install prefix':                get_option('prefix'),
   'Build endianness':              endian,
+}, section: 'Build')
+
+summary({
   'PYTHON':                        python.full_path(),
   'Build PyGObject':               enable_pygobject,
   'Python overrides dir':          pyoverridesdir,
+}, section: 'Python')
+
+summary({
   'Gtk2 immodule dir':             gtk2_im_module_dir,
   'Gtk3 immodule dir':             gtk3_im_module_dir,
   'Gtk4 immodule dir':             gtk4_im_module_dir,
@@ -454,8 +496,11 @@ summary({
   'Socket directory':              ibus_socket_dir,
   'XFixes client disconnect':      have_xfixes,
   'Install systemd service':       enable_systemd,
+}, section: 'Components')
+
+summary({
   'Run test cases':                get_option('tests'),
   'Install tests':                 get_option('install-tests'),
-}, section: 'Options')
+}, section: 'Tests')
 
 meson.add_dist_script(python.full_path(), source_root / 'meson-dist.py')
