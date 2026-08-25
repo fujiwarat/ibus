@@ -6,22 +6,6 @@ project('ibus',
           meson.current_source_dir() / 'meson.config',
           '-beta2'),
       check: true).stdout().strip()),
-  # Use default_options because
-  # add_project_arguments() affects gnome.generate_gir() but
-  # g-ir-scanner does not support '-W' options.
-  #
-  # Set IBUS_ANALYZER=1 to enable '-fanalyzer' flag.
-  # Use `meson setup -Db_sanitize=address,leak` to enable ASAN build
-  # and need libasan package.
-  default_options: [
-    'optimization=2',
-    'c_args=-g -O2 -Wall -Wformat -Werror=format-security @0@'.format(
-        run_command('sh', '-c',
-                    '. "@0@" 2 >/dev/null; test "x$IBUS_ANALYZER" = "x0" && echo -n "" || echo -n "@1@"'.format(
-            meson.current_source_dir() / 'meson.config',
-            '-O0 -fanalyzer'),
-        check: true).stdout().strip()),
-  ],
   meson_version: '>= 1.5',
   license: 'LGPL-2.1-or-later'
 )
@@ -433,21 +417,13 @@ ibus_rpm_spec = configure_file(
 install_emptydir(get_option('datadir') / 'ibus' / 'engine')
 
 summary({
-  'CFLAGS':                        get_option('c_args') + ibus_cflags,
-  'LDFLAGS':                       get_option('c_link_args') + ibus_link_args,
-  'Build type':                    get_option('buildtype'),
-  'Optimization':                  get_option('optimization'),
+  'CFLAGS':                        get_option('c_args'),
+  'LDFLAGS':                       get_option('c_link_args'),
   'Install prefix':                get_option('prefix'),
   'Build endianness':              endian,
-}, section: 'Build')
-
-summary({
   'PYTHON':                        python.full_path(),
   'Build PyGObject':               enable_pygobject,
   'Python overrides dir':          pyoverridesdir,
-}, section: 'Python')
-
-summary({
   'Gtk2 immodule dir':             gtk2_im_module_dir,
   'Gtk3 immodule dir':             gtk3_im_module_dir,
   'Gtk4 immodule dir':             gtk4_im_module_dir,
@@ -478,11 +454,8 @@ summary({
   'Socket directory':              ibus_socket_dir,
   'XFixes client disconnect':      have_xfixes,
   'Install systemd service':       enable_systemd,
-}, section: 'Components')
-
-summary({
   'Run test cases':                get_option('tests'),
   'Install tests':                 get_option('install-tests'),
-}, section: 'Tests')
+}, section: 'Options')
 
 meson.add_dist_script(python.full_path(), source_root / 'meson-dist.py')
