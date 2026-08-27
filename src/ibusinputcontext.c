@@ -569,8 +569,16 @@ ibus_input_context_convert_text (IBusInputContext *context,
                        text->text, error->message);
             g_error_free (error);
         }
-        if (new_attrs)
+        if (new_attrs) {
+#if GLIB_CHECK_VERSION (2, 70, 0)
+            g_object_take_ref (new_attrs);
+#else
+            if (g_object_is_floating (new_attrs)
+                g_object_ref_sink (new_attrs);
+#endif
             ibus_text_set_attributes (text, new_attrs);
+            g_object_unref (new_attrs);
+        }
         break;
     case IBUS_PREEDIT_FORMAT_HINT:
         new_attrs = ibus_attr_list_copy_format_to_hint (text->attrs, &error);
@@ -579,8 +587,16 @@ ibus_input_context_convert_text (IBusInputContext *context,
                        text->text, error->message);
             g_error_free (error);
         }
-        if (new_attrs)
+        if (new_attrs) {
+#if GLIB_CHECK_VERSION (2, 70, 0)
+            g_object_take_ref (new_attrs);
+#else
+            if (g_object_is_floating (new_attrs)
+                g_object_ref_sink (new_attrs);
+#endif
             ibus_text_set_attributes (text, new_attrs);
+            g_object_unref (new_attrs);
+        }
         break;
     default:
         g_assert_not_reached ();
