@@ -1,0 +1,39 @@
+#!/bin/sh
+# vim:set et sts=4 sw=4:
+# -*- coding: utf-8 -*-
+#
+# ibus - The Input Bus
+#
+# Copyright (c) 2026 Takao Fujiwara <takao.fujiwara1@gmail.com>
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+# USA
+
+# You can copy this file to .git/hooks/commit-msg with the file permission
+# '0755'.
+# This script is useful not to commit invalid commit IDs every time and
+# leave a temporary version(1.5.00) in source files when a release is
+# bumped.
+
+. git-sh-setup
+IBUS_HOOK="$GIT_DIR/hooks/ibus-commit-common"
+test -x "$IBUS_HOOK" &&
+    . "$IBUS_HOOK" || {
+    echo >&2 "Not found $IBUS_HOOK"
+    exit 1
+}
+
+check_if_gh_is_active || exit 1
+insert_pr_id $@
