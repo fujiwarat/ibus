@@ -124,6 +124,8 @@ bus_panel_proxy_new (BusConnection *connection,
     const gchar *path = NULL;
     GObject *obj;
     BusPanelProxy *panel;
+    GError *error = NULL;
+    const gchar *message;
 
     g_assert (BUS_IS_CONNECTION (connection));
 
@@ -140,7 +142,7 @@ bus_panel_proxy_new (BusConnection *connection,
 
     obj = g_initable_new (BUS_TYPE_PANEL_PROXY,
                           NULL,
-                          NULL,
+                          &error,
                           "g-object-path",     path,
                           "g-interface-name",  IBUS_INTERFACE_PANEL,
                           "g-connection",      bus_connection_get_dbus_connection (connection),
@@ -148,6 +150,11 @@ bus_panel_proxy_new (BusConnection *connection,
                           "g-flags",           G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START | G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
                           NULL);
 
+    if (error) {
+        /* TODO: rhbz#2213445 Why does this issue happen? */
+        message = error->message;
+        g_critical ("Failed to generate BusPanelProxy: %s", message);
+    }
     panel = BUS_PANEL_PROXY (obj);
     panel->panel_type = panel_type;
     return panel;

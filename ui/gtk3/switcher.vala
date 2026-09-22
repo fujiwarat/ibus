@@ -251,27 +251,37 @@ class Switcher : Gtk.Window {
                            null,
                            event,
                            null);
-        if (status != Gdk.GrabStatus.SUCCESS)
+        if (status != Gdk.GrabStatus.SUCCESS) {
             warning("Grab keyboard failed! status = %d", status);
-        status = seat.grab(get_window(),
-                           Gdk.SeatCapabilities.POINTER,
-                           true,
-                           null,
-                           event,
-                           null);
-        if (status != Gdk.GrabStatus.SUCCESS)
-            warning("Grab pointer failed! status = %d", status);
+        } else {
+            status = seat.grab(get_window(),
+                               Gdk.SeatCapabilities.POINTER,
+                               true,
+                               null,
+                               event,
+                               null);
+            if (status != Gdk.GrabStatus.SUCCESS)
+                warning("Grab pointer failed! status = %d", status);
+        }
 
-        // Probably we can delete m_popup_delay_time in 1.6
-        pointer.get_position_double(null,
-                                    out m_mouse_init_x,
-                                    out m_mouse_init_y);
-        m_mouse_moved = false;
+        /* Fix RHBZ #1771238 assert(m_loop == null)
+         * Grabbing keyboard can be failed when the second Super-e is typed
+         * before Switcher dialog is focused. And m_loop could not be released
+         * if the failed Super-e would call m_loop.run() below and could not
+         * call key_release_event(). And m_loop == null would be false in the
+         * third Super-e.
+         */
+        if (status == Gdk.GrabStatus.SUCCESS) {
+            // Probably we can delete m_popup_delay_time in 1.6
+            pointer.get_position_double(null,
+                                        out m_mouse_init_x,
+                                        out m_mouse_init_y);
+            m_mouse_moved = false;
 
-
-        m_loop = new GLib.MainLoop();
-        m_loop.run();
-        m_loop = null;
+            m_loop = new GLib.MainLoop();
+            m_loop.run();
+            m_loop = null;
+        }
 
         seat.ungrab();
 
