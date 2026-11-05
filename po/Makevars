@@ -46,3 +46,6 @@ EXTRA_LOCALE_CATEGORIES =
 # https://wiki.gnome.org/Initiatives/GnomeGoals/GettextMigration
 PO_DEPENDS_ON_POT = no
 DIST_DEPENDS_ON_UPDATE_PO = no
+
+# Force sequential execution inside the po directory to protect msgfmt
+.NOTPARALLEL:
