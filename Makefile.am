@@ -169,4 +169,7 @@ GITIGNOREFILES = \
 	stamp-h* \
 	$(NULL)
 
+# Force sequential execution inside the po directory to protect msgfmt
+.NOTPARALLEL: po
+
 -include $(top_srcdir)/git.mk
